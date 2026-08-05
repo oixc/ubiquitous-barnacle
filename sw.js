@@ -1,7 +1,12 @@
-const CACHE_NAME = "grocery-v4";
+const CACHE_NAME = "grocery-v5";
 const ASSETS = [
   "./index.html",
   "./manifest.json",
+  "./js/main.js",
+  "./js/db.js",
+  "./js/sync.js",
+  "./js/catalog.js",
+  "./js/ui.js",
   "https://cdn.tailwindcss.com",
 ];
 

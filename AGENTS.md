@@ -1,10 +1,13 @@
 # AGENTS.md
 
 ## What this is
-Zero-build, single-file PWA: a shared grocery list. All app logic (IndexedDB storage,
-ntfy.sh SSE sync, UI rendering) lives in one inline `<script>` in `index.html`.
-`sw.js` is the service worker, `manifest.json` the PWA manifest. No build step, no
-npm, no tests — keep it that way.
+Zero-build PWA: a shared grocery list. `index.html` is markup/shell only; app logic
+lives in ES modules under `js/` (loaded via `<script type="module">`), split by
+concern: `main.js` (bootstrap, app state, single write path for all mutations),
+`db.js` (IndexedDB), `sync.js` (ntfy.sh SSE), `catalog.js` (Product resolution +
+Item revive), `ui.js` (rendering + delegated events; never touches DB or network
+directly). `sw.js` is the service worker, `manifest.json` the PWA manifest. No
+build step, no npm, no tests — keep it that way.
 
 ## Run & verify
 - Serve statically, e.g. `python3 -m http.server 8000` — service worker and
@@ -12,11 +15,12 @@ npm, no tests — keep it that way.
 - There are no tests, linters, or typechecks. Verify changes manually in the browser.
 
 ## Gotchas
-- `DISABLE_SYNC` flag near the top of the script in `index.html` is currently `true`
+- `DISABLE_SYNC` flag near the top of `js/main.js` is currently `true`
   (dev mode). While true, no ntfy.sh network calls happen. Set to `false` to test sync.
-- Service worker is cache-first with hardcoded `CACHE_NAME = "grocery-v4"` in `sw.js`.
-  Bump the version when shipping changes, or installed clients keep stale assets.
-  ntfy.sh requests deliberately bypass the cache.
+- Service worker is cache-first with hardcoded `CACHE_NAME = "grocery-v5"` in `sw.js`.
+  Bump the version AND add any new `js/*.js` file to `ASSETS` when shipping changes,
+  or installed clients keep stale assets. ntfy.sh requests deliberately bypass the
+  cache.
 - Sync protocol: ntfy.sh topic == List name (from `#list=` URL hash, else
   localStorage `pwa_grocery_list`, else generated). Actions: `PUT_ITEM`,
   `DELETE_ITEM`, `PUT_PRODUCT`, `DELETE_PRODUCT`, `CLEAR_BOUGHT`,
