@@ -309,6 +309,9 @@ function renderCatalog(products, history) {
           <button data-action="rename-product" data-id="${p.id}" aria-label="Rename product" title="Rename" class="text-slate-500 hover:text-slate-200 p-1 rounded-lg transition">
             ${icon("pencil", "w-4 h-4")}
           </button>
+          <button data-action="delete-product" data-id="${p.id}" aria-label="Delete product" title="Delete" class="text-slate-500 hover:text-rose-400 p-1 rounded-lg transition">
+            ${icon("trash", "w-4 h-4")}
+          </button>
         </div>
       </div>
     `;
@@ -363,6 +366,7 @@ function bindEvents() {
     else if (action === "remove-item") actions.removeItem(el.dataset.id);
     else if (action === "toggle-bought") actions.toggleBought(el.dataset.id);
     else if (action === "rename-product") startRename(el.dataset.id);
+    else if (action === "delete-product") actions.deleteProduct(el.dataset.id);
     else if (action === "add-suggested") actions.suggest(el.dataset.id);
     else if (action === "open-menu") openMenu();
     else if (action === "close-menu") closeMenu();

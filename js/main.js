@@ -104,6 +104,19 @@ const actions = {
     renderAll();
   },
   deleteProduct: async (id, broadcast = true) => {
+    if (broadcast) {
+      const items = await db.getAll("items", listName);
+      if (items.some((i) => i.productId === id)) {
+        alert("This product is still on the list. Remove it from the list first.");
+        return;
+      }
+      const products = await db.getAll("products", listName);
+      const product = products.find((p) => p.id === id);
+      if (!product) return;
+      if (!confirm(`Delete "${product.defaultSpelling}" from the catalog?`)) {
+        return;
+      }
+    }
     await db.remove("products", id);
     if (broadcast) sync.publishAction({ type: "DELETE_PRODUCT", id });
     renderAll();
