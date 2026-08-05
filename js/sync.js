@@ -14,6 +14,12 @@ let status = "";
 let onStatus = () => {};
 let apply = null;
 let eventSource = null;
+// Fresh join requests catch-up at most once per page load, no matter how often
+// the SSE connection reopens (each reconnect re-runs `onopen`).
+let requestedOnce = false;
+// Responses to a REQUEST_SYNC are deduped per (peerId, ts) so the 12h SSE replay
+// on (re)connect can never make this peer answer the same request twice.
+const lastResponded = new Map();
 
 const COUNT_KEY = "pwa_grocery_msgcount";
 const DATE_KEY = "pwa_grocery_msgdate";
@@ -93,8 +99,9 @@ export function initSync() {
       db.getAll("items", getListName()),
       db.getAll("products", getListName()),
     ]);
-    if (items.length === 0 && products.length === 0) {
-      publishAction({ type: "REQUEST_SYNC" });
+    if (items.length === 0 && products.length === 0 && !requestedOnce) {
+      requestedOnce = true;
+      publishAction({ type: "REQUEST_SYNC", ts: Date.now() });
     }
   };
 
@@ -149,7 +156,7 @@ export async function handleRemoteAction(action) {
     const products = await db.getAll("products", listName);
     if (!products.some((p) => p.id === action.item.productId)) {
       // Unknown Product: pull the full List state instead of storing a dangling Item.
-      publishAction({ type: "REQUEST_SYNC" });
+      publishAction({ type: "REQUEST_SYNC", ts: Date.now() });
       return;
     }
     await apply.putItem(action.item, false);
@@ -165,11 +172,18 @@ export async function handleRemoteAction(action) {
   } else if (action.type === "CLEAR_BOUGHT") {
     await apply.clearBought(false);
   } else if (action.type === "REQUEST_SYNC") {
+    if (
+      action.ts !== undefined &&
+      lastResponded.get(action.peerId) === action.ts
+    ) {
+      return;
+    }
     const [items, products] = await Promise.all([
       db.getAll("items", listName),
       db.getAll("products", listName),
     ]);
     publishAction({ type: "FULL_SYNC", items, products });
+    if (action.ts !== undefined) lastResponded.set(action.peerId, action.ts);
   } else if (action.type === "FULL_SYNC") {
     if (Array.isArray(action.items)) {
       for (const item of action.items) {

@@ -125,7 +125,7 @@ const actions = {
   },
   changeList,
   copyInviteLink,
-  refresh: () => sync.publishAction({ type: "REQUEST_SYNC" }),
+  refresh: () => sync.publishAction({ type: "REQUEST_SYNC", ts: Date.now() }),
   setSyncEnabled: (value) => {
     localStorage.setItem("pwa_grocery_sync", value ? "1" : "0");
     sync.setSyncEnabled(value);
