@@ -4,6 +4,7 @@
 
 let actions = {};
 let showView = () => {};
+let rerender = () => {};
 
 // --- Icons (inline SVG, no external library) ---
 const ICONS = {
@@ -28,6 +29,7 @@ export function icon(name, cls = "w-5 h-5") {
 export function init(cfg) {
   actions = cfg.actions;
   showView = cfg.showView;
+  rerender = cfg.renderAll || rerender;
   injectIcons();
   bindEvents();
 }
@@ -52,21 +54,31 @@ export function renderAll({ items, products, history, suggestions, listName, vie
   renderHistory(history, products);
 }
 
+function syncSuggestionsVisibility() {
+  const el = document.getElementById("suggestions");
+  if (!el) return;
+  const input = document.getElementById("item-input");
+  const typing = input && input.value.trim().length > 0;
+  el.classList.toggle("hidden", typing);
+}
+
 function renderSuggestions(suggestions) {
   const el = document.getElementById("suggestions");
   if (!el) return;
+  syncSuggestionsVisibility();
   if (!suggestions || suggestions.length === 0) {
     el.innerHTML = "";
     return;
   }
   el.innerHTML = `
+    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Buy again</div>
     <div class="flex gap-2 overflow-x-auto pb-1">
       ${suggestions
         .map(
           (s) => `
-        <button data-action="add-suggested" data-id="${s.product.id}" title="Bought ${s.count}×" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full bg-slate-800/80 border border-slate-700 text-xs text-slate-200 hover:bg-slate-700 transition">
+        <button data-action="add-suggested" data-id="${s.product.id}" title="Bought ${s.count}×" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/40 text-xs text-amber-200 hover:bg-amber-900/40 transition">
           ${escapeHtml(s.product.defaultSpelling)}
-          ${icon("plus", "w-3.5 h-3.5 text-blue-400")}
+          ${icon("plus", "w-3.5 h-3.5 text-amber-300")}
         </button>`,
         )
         .join("")}
@@ -157,6 +169,7 @@ export function setListName(listName) {
 }
 
 // --- List view ---
+let listItems = [];
 export function renderList({ items, products, listName }) {
   setListName(listName);
   const productById = new Map(products.map((p) => [p.id, p]));
@@ -171,10 +184,12 @@ export function renderList({ items, products, listName }) {
   }
 
   items.sort((a, b) => b.createdAt - a.createdAt);
+  listItems = items;
 
   const itemRow = (item) => {
     const product = productById.get(item.productId);
     const text = product ? product.defaultSpelling : "…";
+    const detail = item.detail || "";
     const rowCls = item.bought
       ? "flex items-center p-3.5 bg-emerald-950/60 rounded-xl border border-emerald-800/60 shadow-sm transition"
       : "flex items-center p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition";
@@ -189,6 +204,15 @@ export function renderList({ items, products, listName }) {
           <span class="text-sm font-medium ${item.bought ? "line-through text-slate-500" : "text-slate-200"}">
             ${escapeHtml(text)}
           </span>
+        </button>
+        <button
+          data-action="edit-detail"
+          data-id="${item.id}"
+          aria-label="Edit detail"
+          title="Edit detail"
+          class="ml-1 shrink-0 px-2 py-1 rounded-lg border ${item.bought ? "border-emerald-800/60" : "border-slate-800"} text-xs ${detail ? "text-slate-400 hover:text-blue-400" : "text-slate-600 hover:text-blue-400"} transition"
+        >
+          ${detail ? escapeHtml(detail) : icon("pencil", "w-3.5 h-3.5")}
         </button>
         <button data-action="remove-item" data-id="${item.id}" aria-label="Remove item" title="Remove item" class="ml-1 text-slate-500 hover:text-rose-400 p-1 rounded-lg transition shrink-0">
           ${icon("trash")}
@@ -251,7 +275,7 @@ function startRename(productId) {
     if (save && value && value !== product.defaultSpelling) {
       actions.renameProduct(productId, value);
     } else {
-      renderAll();
+      rerender();
     }
   };
 
@@ -265,6 +289,83 @@ function startRename(productId) {
   nameEl.appendChild(input);
   input.focus();
   input.select();
+}
+
+function startDetailEdit(itemId) {
+  const btn = document.querySelector(
+    `[data-action="edit-detail"][data-id="${itemId}"]`,
+  );
+  if (!btn) return;
+  const item = listItems.find((i) => i.id === itemId);
+  if (!item) return;
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = item.detail || "";
+  input.placeholder = "e.g. 500 g";
+  input.className =
+    "w-28 px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600";
+
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    const value = input.value.trim();
+    if (save) {
+      actions.updateItemDetail(itemId, value);
+    } else {
+      rerender();
+    }
+  };
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") finish(true);
+    else if (e.key === "Escape") finish(false);
+  });
+  input.addEventListener("blur", () => finish(true));
+
+  btn.textContent = "";
+  btn.appendChild(input);
+  input.focus();
+  input.select();
+}
+
+// --- Preset quick-choice chips ---
+let detailTimer = null;
+
+function renderPresetChips(product) {
+  const el = document.getElementById("preset-chips");
+  if (!el) return;
+  const presets =
+    product && product.presets && product.presets.length
+      ? product.presets
+      : [];
+  if (presets.length === 0) {
+    clearPresetChips();
+    return;
+  }
+  el.innerHTML = `
+    <div class="flex flex-wrap gap-1.5">
+      <span class="self-center text-[10px] uppercase tracking-wide text-slate-500 shrink-0">With</span>
+      ${presets
+        .map(
+          (d) => `
+        <button data-action="add-with-detail" data-id="${product.id}" data-detail="${escapeHtml(d)}" class="flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-lg bg-blue-950/40 border border-blue-800/60 text-xs text-blue-200 hover:bg-blue-900/40 transition">
+          ${escapeHtml(d)}
+          ${icon("plus", "w-3.5 h-3.5 text-blue-300")}
+        </button>`,
+        )
+        .join("")}
+    </div>
+  `;
+  el.classList.remove("hidden");
+}
+
+function clearPresetChips() {
+  const el = document.getElementById("preset-chips");
+  if (!el) return;
+  el.innerHTML = "";
+  el.classList.add("hidden");
 }
 
 function renderCatalog(products, history) {
@@ -300,6 +401,11 @@ function renderCatalog(products, history) {
         <div class="min-w-0">
           <div class="text-sm font-medium text-slate-200" data-role="product-name">${escapeHtml(p.defaultSpelling)}</div>
           ${p.aliases && p.aliases.length ? `<div class="mt-1 flex flex-wrap gap-1">${p.aliases.map((a) => `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">${escapeHtml(a)}</span>`).join("")}</div>` : ""}
+          ${p.presets && p.presets.length ? `<div class="mt-1 flex flex-wrap gap-1">${p.presets.map((d) => `
+            <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+              ${escapeHtml(d)}
+              <button data-action="delete-preset" data-id="${p.id}" data-detail="${escapeHtml(d)}" aria-label="Remove preset" title="Remove preset" class="text-slate-500 hover:text-rose-400 leading-none">×</button>
+            </span>`).join("")}</div>` : ""}
         </div>
         <div class="flex items-center gap-3 shrink-0 ml-3">
           <div class="text-right">
@@ -338,7 +444,7 @@ function renderHistory(history, products) {
       const name = product ? product.defaultSpelling : "…";
       return `
       <div class="flex items-center justify-between p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition">
-        <span class="text-sm font-medium text-slate-200">${escapeHtml(name)}</span>
+        <span class="text-sm font-medium text-slate-200">${escapeHtml(name)}${h.detail ? ` <span class="text-xs text-slate-400">· ${escapeHtml(h.detail)}</span>` : ""}</span>
         <span class="text-xs text-slate-500 shrink-0 ml-3">${escapeHtml(new Date(h.boughtAt).toLocaleString())}</span>
       </div>
     `;
@@ -347,13 +453,31 @@ function renderHistory(history, products) {
 }
 
 function bindEvents() {
-  document.getElementById("add-form").addEventListener("submit", (e) => {
+  const addForm = document.getElementById("add-form");
+  const itemInput = document.getElementById("item-input");
+
+  addForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    const input = document.getElementById("item-input");
-    const text = input.value.trim();
+    const text = itemInput.value.trim();
     if (!text) return;
-    input.value = "";
+    itemInput.value = "";
+    clearPresetChips();
+    syncSuggestionsVisibility();
     actions.addItem(text);
+  });
+
+  itemInput.addEventListener("input", (e) => {
+    clearTimeout(detailTimer);
+    syncSuggestionsVisibility();
+    const value = e.target.value.trim();
+    if (!value) {
+      clearPresetChips();
+      return;
+    }
+    detailTimer = setTimeout(async () => {
+      const product = await actions.matchProduct(value);
+      renderPresetChips(product);
+    }, 200);
   });
 
   document.addEventListener("click", (e) => {
@@ -367,8 +491,16 @@ function bindEvents() {
     else if (action === "toggle-bought") actions.toggleBought(el.dataset.id);
     else if (action === "rename-product") startRename(el.dataset.id);
     else if (action === "delete-product") actions.deleteProduct(el.dataset.id);
+    else if (action === "delete-preset")
+      actions.deletePreset(el.dataset.id, el.dataset.detail);
     else if (action === "add-suggested") actions.suggest(el.dataset.id);
-    else if (action === "open-menu") openMenu();
+    else if (action === "edit-detail") startDetailEdit(el.dataset.id);
+    else if (action === "add-with-detail") {
+      itemInput.value = "";
+      clearPresetChips();
+      syncSuggestionsVisibility();
+      actions.addItemWithDetail(el.dataset.id, el.dataset.detail);
+    } else if (action === "open-menu") openMenu();
     else if (action === "close-menu") closeMenu();
     else if (action.startsWith("view-")) showView(el.dataset.view);
   });

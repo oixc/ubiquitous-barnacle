@@ -18,6 +18,39 @@ export function normalizeText(str) {
   return str.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+// Detail consolidation: case/whitespace folding plus a space between digit and
+// letter, so "500g", "500  g" and "500 G" all read as "500 g". No unit
+// dictionary: "g" and "grams" stay distinct.
+export function normalizeDetail(str) {
+  return normalizeText(str).replace(/(\d)([a-z])/g, "$1 $2");
+}
+
+const PRESET_CAP = 4;
+
+// Returns the canonical Preset spelling for a Detail, or the raw Detail itself
+// when no Preset consolidates to it.
+export function canonicalizeDetail(product, detail) {
+  const value = (detail || "").trim();
+  if (!value) return "";
+  const normalized = normalizeDetail(value);
+  const existing = (product.presets || []).find(
+    (p) => normalizeDetail(p) === normalized,
+  );
+  return existing || value;
+}
+
+// Registers a Detail as a Preset if it is new. Returns true when the Product
+// changed so the caller can decide whether to persist it.
+function ensurePreset(product, detail) {
+  const canonical = canonicalizeDetail(product, detail);
+  if (!canonical) return false;
+  const presets = product.presets || (product.presets = []);
+  if (presets.some((p) => p === canonical)) return false;
+  presets.push(canonical);
+  if (presets.length > PRESET_CAP) presets.splice(0, presets.length - PRESET_CAP);
+  return true;
+}
+
 export function levenshtein(a, b) {
   const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
   for (let j = 0; j <= b.length; j++) dp[0][j] = j;
@@ -33,17 +66,60 @@ export function levenshtein(a, b) {
   return dp[a.length][b.length];
 }
 
-export async function resolveProduct(text) {
+// Splits an input line into a Product part and a Detail part. The Product part
+// is the longest known Product spelling (or alias) that is a word-boundary
+// prefix; the remainder is the Detail. When no known Product matches a
+// multi-word input, the whole line becomes a new Product and the input is
+// treated as its exact spelling (skipNearMiss) — Details can only be attached
+// once the Product is in the Catalog.
+export async function splitProductDetail(text) {
+  const trimmed = text.trim();
+  const tokens = trimmed.split(/\s+/);
+  if (tokens.length < 2) {
+    return { productText: trimmed, detail: "", skipNearMiss: false };
+  }
+
+  const products = await db.getAll("products", getListName());
+  const known = new Set();
+  for (const p of products) {
+    known.add(normalizeText(p.defaultSpelling));
+    for (const a of p.aliases) known.add(normalizeText(a));
+  }
+
+  for (let k = tokens.length; k >= 1; k--) {
+    if (known.has(normalizeText(tokens.slice(0, k).join(" ")))) {
+      return {
+        productText: tokens.slice(0, k).join(" "),
+        detail: tokens.slice(k).join(" "),
+        skipNearMiss: false,
+      };
+    }
+  }
+
+  return { productText: trimmed, detail: "", skipNearMiss: true };
+}
+
+// Read-only exact match (used for live Preset chips). Never writes.
+export async function matchProduct(text) {
   const listName = getListName();
   const normalized = normalizeText(text);
   const products = await db.getAll("products", listName);
-
-  const exact = products.find(
-    (p) =>
-      normalizeText(p.defaultSpelling) === normalized ||
-      p.aliases.some((a) => normalizeText(a) === normalized),
+  return (
+    products.find(
+      (p) =>
+        normalizeText(p.defaultSpelling) === normalized ||
+        p.aliases.some((a) => normalizeText(a) === normalized),
+    ) || null
   );
+}
+
+export async function resolveProduct(text, skipNearMiss = false) {
+  const exact = await matchProduct(text);
   if (exact) return exact;
+
+  const listName = getListName();
+  const normalized = normalizeText(text);
+  const products = await db.getAll("products", listName);
 
   let best = null;
   let bestDist = Infinity;
@@ -57,7 +133,7 @@ export async function resolveProduct(text) {
     }
   }
   const threshold = normalized.length < 5 ? 1 : 2;
-  if (best && bestDist <= threshold) {
+  if (!skipNearMiss && best && bestDist <= threshold) {
     if (confirm(`Did you mean "${best.defaultSpelling}"?`)) {
       if (!best.aliases.some((a) => normalizeText(a) === normalized)) {
         best.aliases.push(text);
@@ -72,12 +148,13 @@ export async function resolveProduct(text) {
     list: listName,
     defaultSpelling: text,
     aliases: [],
+    presets: [],
   };
   await apply.putProduct(product, true);
   return product;
 }
 
-export async function addOrReviveItem(product) {
+export async function addOrReviveItem(product, detail = "") {
   const listName = getListName();
   const items = await db.getAll("items", listName);
   const existing = items.find((i) => i.productId === product.id && !i.bought);
@@ -87,7 +164,9 @@ export async function addOrReviveItem(product) {
   if (bought) {
     bought.bought = false;
     bought.createdAt = Date.now();
+    if (detail) bought.detail = canonicalizeDetail(product, detail);
     await apply.putItem(bought, true);
+    if (ensurePreset(product, bought.detail)) await apply.putProduct(product, true);
     return;
   }
 
@@ -98,7 +177,17 @@ export async function addOrReviveItem(product) {
     bought: false,
     createdAt: Date.now(),
   };
+  if (detail) item.detail = canonicalizeDetail(product, detail);
   await apply.putItem(item, true);
+  if (ensurePreset(product, item.detail)) await apply.putProduct(product, true);
+}
+
+// Sets (or clears) an Item's Detail from the inline editor; canonicalizes
+// against the Product's Presets and learns new Details as Presets.
+export async function setItemDetail(item, product, detail) {
+  item.detail = canonicalizeDetail(product, detail);
+  await apply.putItem(item, true);
+  if (ensurePreset(product, item.detail)) await apply.putProduct(product, true);
 }
 
 // --- Purchase suggestions (Restock prompts) ---

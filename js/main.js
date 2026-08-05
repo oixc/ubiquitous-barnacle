@@ -55,8 +55,10 @@ async function renderAll() {
 
 // --- User actions ---
 async function addItem(text) {
-  const product = await catalog.resolveProduct(text);
-  if (product) await catalog.addOrReviveItem(product);
+  const { productText, detail, skipNearMiss } =
+    await catalog.splitProductDetail(text);
+  const product = await catalog.resolveProduct(productText, skipNearMiss);
+  if (product) await catalog.addOrReviveItem(product, detail);
 }
 
 function changeList() {
@@ -85,6 +87,21 @@ function copyInviteLink() {
 const actions = {
   getListName: () => listName,
   addItem,
+  matchProduct: catalog.matchProduct,
+  addItemWithDetail: async (productId, detail) => {
+    const products = await db.getAll("products", listName);
+    const product = products.find((p) => p.id === productId);
+    if (product) await catalog.addOrReviveItem(product, detail);
+  },
+  updateItemDetail: async (itemId, detail) => {
+    const [items, products] = await Promise.all([
+      db.getAll("items", listName),
+      db.getAll("products", listName),
+    ]);
+    const item = items.find((i) => i.id === itemId);
+    const product = item && products.find((p) => p.id === item.productId);
+    if (item && product) await catalog.setItemDetail(item, product, detail);
+  },
   changeList,
   copyInviteLink,
 
@@ -128,6 +145,13 @@ const actions = {
     product.defaultSpelling = newSpelling;
     await actions.putProduct(product, true);
   },
+  deletePreset: async (productId, detail) => {
+    const products = await db.getAll("products", listName);
+    const product = products.find((p) => p.id === productId);
+    if (!product || !product.presets) return;
+    product.presets = product.presets.filter((p) => p !== detail);
+    await actions.putProduct(product, true);
+  },
   putHistory: async (record) => {
     await db.put("purchaseHistory", record);
     renderAll();
@@ -158,6 +182,7 @@ const actions = {
         id: `${listName}::${uid("hist_")}`,
         list: listName,
         productId: item.productId,
+        detail: item.detail || "",
         boughtAt: Date.now(),
       });
     }
@@ -196,7 +221,7 @@ function boot() {
     });
   }
 
-  ui.init({ actions, showView });
+  ui.init({ actions, showView, renderAll });
 
   db.initDb()
     .then(() => {

@@ -49,6 +49,19 @@ truly novel text creates a new Product.
 The spelling shown everywhere a Product appears. Initially the first spelling
 ever used; changed by renaming the Product, which applies for all Peers.
 
+**Detail**:
+An optional free-text qualifier an Item carries, beyond the Product: a quantity,
+volume, weight, or brand ("2", "500 g", "Alpro"). Not part of the Product's
+identity — the same Product can appear with different Details.
+_Avoid_: amount, quantity (as the only kind)
+
+**Preset**:
+A Detail a Product offers as a one-tap choice when adding an Item. Up to four,
+ordered by recency of use; the least recently used falls off when a new Detail
+is learned. Presets are shared with the List like the Product itself; equal
+spellings consolidate (e.g. "500g" matches "500 g").
+_Avoid_: default (singular — clashes with "Default spelling")
+
 **Purchase history**:
 The record of previously bought Items, kept after clearing, referencing Products
 rather than raw text — so statistics are immune to spelling variation.

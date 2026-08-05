@@ -5,7 +5,7 @@ let db = null;
 
 export function initDb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open("GroceryDB", 3);
+    const req = indexedDB.open("GroceryDB", 4);
 
     req.onupgradeneeded = (e) => {
       const targetDb = e.target.result;
