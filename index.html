@@ -40,14 +40,14 @@
           </div>
         </div>
 
-        <!-- Room Sharing Controls -->
+        <!-- List Sharing Controls -->
         <div
           class="bg-slate-50 p-3 rounded-xl border border-slate-200/60 text-xs text-slate-600 flex items-center justify-between gap-2"
         >
           <div class="truncate">
-            <span class="font-semibold text-slate-700">Room:</span>
+            <span class="font-semibold text-slate-700">List:</span>
             <span
-              id="room-id-display"
+              id="list-id-display"
               class="font-mono text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-200"
             ></span>
           </div>
@@ -59,7 +59,7 @@
               📋 Copy Link
             </button>
             <button
-              onclick="promptChangeRoom()"
+              onclick="changeList()"
               class="bg-slate-200 text-slate-700 px-2 py-1 rounded-lg font-medium hover:bg-slate-300 transition"
             >
               Change
@@ -103,32 +103,38 @@
         });
       }
 
-      // --- Room & Identity Setup ---
-      const SENDER_ID = "usr_" + Math.random().toString(36).substring(2, 9);
+      // --- List & Peer Setup ---
+      const PEER_ID = "usr_" + Math.random().toString(36).substring(2, 9);
 
-      function getRoomFromUrl() {
+      function getListFromUrl() {
         const hash = window.location.hash.replace("#", "");
         const params = new URLSearchParams(hash);
-        return params.get("room");
+        return params.get("list");
       }
 
-      let room = getRoomFromUrl() || localStorage.getItem("pwa_grocery_room");
-      if (!room) {
-        room = "grocery-" + Math.random().toString(36).substring(2, 8);
+      let listName = getListFromUrl() || localStorage.getItem("pwa_grocery_list");
+      if (!listName) {
+        listName = "grocery-" + Math.random().toString(36).substring(2, 8);
       }
-      localStorage.setItem("pwa_grocery_room", room);
-      window.location.hash = `room=${room}`;
-      document.getElementById("room-id-display").textContent = room;
+      localStorage.setItem("pwa_grocery_list", listName);
+      window.location.hash = `list=${listName}`;
+      document.getElementById("list-id-display").textContent = listName;
 
       // --- IndexedDB Database Setup ---
       let db;
-      const dbReq = indexedDB.open("GroceryDB", 2);
+      const dbReq = indexedDB.open("GroceryDB", 3);
 
       dbReq.onupgradeneeded = (e) => {
         db = e.target.result;
-        // Nobody has real data yet; drop the v1 store and build the v2 schema.
+        // Nobody has real data yet; drop and rebuild the schema each version.
         if (db.objectStoreNames.contains("items")) {
           db.deleteObjectStore("items");
+        }
+        if (db.objectStoreNames.contains("products")) {
+          db.deleteObjectStore("products");
+        }
+        if (db.objectStoreNames.contains("purchaseHistory")) {
+          db.deleteObjectStore("purchaseHistory");
         }
         const items = db.createObjectStore("items", { keyPath: "id" });
         items.createIndex("byList", "list", { unique: false });
@@ -159,7 +165,7 @@
       async function getAllItems() {
         return new Promise((resolve) => {
           const tx = db.transaction("items", "readonly");
-          const req = tx.objectStore("items").index("byList").getAll(room);
+          const req = tx.objectStore("items").index("byList").getAll(listName);
           req.onsuccess = () => resolve(req.result || []);
         });
       }
@@ -189,7 +195,7 @@
       async function getAllProducts() {
         return new Promise((resolve) => {
           const tx = db.transaction("products", "readonly");
-          const req = tx.objectStore("products").index("byList").getAll(room);
+          const req = tx.objectStore("products").index("byList").getAll(listName);
           req.onsuccess = () => resolve(req.result || []);
         });
       }
@@ -258,7 +264,7 @@
         }
 
         updateStatusUI("connecting");
-        const sseUrl = `https://ntfy.sh/${encodeURIComponent(room)}/sse?since=12h`;
+        const sseUrl = `https://ntfy.sh/${encodeURIComponent(listName)}/sse?since=12h`;
         eventSource = new EventSource(sseUrl);
 
         eventSource.onopen = () => {
@@ -276,7 +282,7 @@
             if (ntfyData.event !== "message" || !ntfyData.message) return;
 
             const action = JSON.parse(ntfyData.message);
-            if (action.senderId === SENDER_ID) return;
+            if (action.peerId === PEER_ID) return;
 
             await handleRemoteAction(action);
           } catch (err) {}
@@ -286,9 +292,9 @@
       async function publishAction(action) {
         if (DISABLE_SYNC) return; // Prevent network requests during dev
 
-        action.senderId = SENDER_ID;
+        action.peerId = PEER_ID;
         try {
-          await fetch(`https://ntfy.sh/${encodeURIComponent(room)}`, {
+          await fetch(`https://ntfy.sh/${encodeURIComponent(listName)}`, {
             method: "POST",
             body: JSON.stringify(action),
           });
@@ -299,7 +305,7 @@
 
       async function handleRemoteAction(action) {
         if (action.type === "PUT_ITEM") {
-          if (action.item.list !== room) return;
+          if (action.item.list !== listName) return;
           const products = await getAllProducts();
           if (!products.some((p) => p.id === action.item.productId)) {
             // Unknown Product: pull the full List state instead of storing a dangling Item.
@@ -308,13 +314,13 @@
           }
           await putItem(action.item, false);
         } else if (action.type === "DELETE_ITEM") {
-          if (!action.id.startsWith(room + "::")) return;
+          if (!action.id.startsWith(listName + "::")) return;
           await deleteItem(action.id, false);
         } else if (action.type === "PUT_PRODUCT") {
-          if (action.product.list !== room) return;
+          if (action.product.list !== listName) return;
           await putProduct(action.product, false);
         } else if (action.type === "DELETE_PRODUCT") {
-          if (!action.id.startsWith(room + "::")) return;
+          if (!action.id.startsWith(listName + "::")) return;
           await deleteProduct(action.id, false);
         } else if (action.type === "CLEAR_BOUGHT") {
           await clearBought(false);
@@ -327,12 +333,12 @@
         } else if (action.type === "FULL_SYNC") {
           if (Array.isArray(action.items)) {
             for (const item of action.items) {
-              if (item.list === room) await putItem(item, false);
+              if (item.list === listName) await putItem(item, false);
             }
           }
           if (Array.isArray(action.products)) {
             for (const product of action.products) {
-              if (product.list === room) await putProduct(product, false);
+              if (product.list === listName) await putProduct(product, false);
             }
           }
         }
@@ -346,10 +352,10 @@
         const listEl = document.getElementById("grocery-list");
 
         items.sort(
-          (a, b) => a.completed - b.completed || b.createdAt - a.createdAt,
+          (a, b) => a.bought - b.bought || b.createdAt - a.createdAt,
         );
 
-        const boughtCount = items.filter((i) => i.completed).length;
+        const boughtCount = items.filter((i) => i.bought).length;
 
         if (items.length === 0) {
           listEl.innerHTML = `
@@ -379,11 +385,11 @@
           <label class="flex items-center gap-3 flex-1 cursor-pointer select-none">
             <input 
               type="checkbox" 
-              ${item.completed ? "checked" : ""} 
-              onchange="toggleCheck('${item.id}', this.checked)"
+              ${item.bought ? "checked" : ""} 
+              onchange="toggleBought('${item.id}', this.checked)"
               class="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 transition"
             >
-            <span class="text-sm font-medium ${item.completed ? "line-through text-slate-400" : "text-slate-800"}">
+            <span class="text-sm font-medium ${item.bought ? "line-through text-slate-400" : "text-slate-800"}">
               ${escapeHtml(text)}
             </span>
           </label>
@@ -452,8 +458,8 @@
         }
 
         const product = {
-          id: `${room}::${uid("prod_")}`,
-          list: room,
+          id: `${listName}::${uid("prod_")}`,
+          list: listName,
           defaultSpelling: text,
           aliases: [],
         };
@@ -464,25 +470,25 @@
       async function addOrReviveItem(product) {
         const items = await getAllItems();
         const existing = items.find(
-          (i) => i.productId === product.id && !i.completed,
+          (i) => i.productId === product.id && !i.bought,
         );
         if (existing) return;
 
         const bought = items.find(
-          (i) => i.productId === product.id && i.completed,
+          (i) => i.productId === product.id && i.bought,
         );
         if (bought) {
-          bought.completed = false;
+          bought.bought = false;
           bought.createdAt = Date.now();
           await putItem(bought, true);
           return;
         }
 
         const item = {
-          id: `${room}::${uid("item_")}`,
-          list: room,
+          id: `${listName}::${uid("item_")}`,
+          list: listName,
           productId: product.id,
-          completed: false,
+          bought: false,
           createdAt: Date.now(),
         };
         await putItem(item, true);
@@ -501,17 +507,17 @@
         });
       });
 
-      async function toggleCheck(id, completed) {
+      async function toggleBought(id, bought) {
         const items = await getAllItems();
         const item = items.find((i) => i.id === id);
         if (item) {
-          const wasBought = item.completed;
-          item.completed = completed;
+          const wasBought = item.bought;
+          item.bought = bought;
           putItem(item, true);
-          if (completed && !wasBought) {
+          if (bought && !wasBought) {
             putHistory({
-              id: `${room}::${uid("hist_")}`,
-              list: room,
+              id: `${listName}::${uid("hist_")}`,
+              list: listName,
               productId: item.productId,
               boughtAt: Date.now(),
             });
@@ -521,7 +527,7 @@
 
       async function clearBought(broadcast = true) {
         const items = await getAllItems();
-        const boughtIds = items.filter((i) => i.completed).map((i) => i.id);
+        const boughtIds = items.filter((i) => i.bought).map((i) => i.id);
         if (boughtIds.length === 0) return;
         if (
           broadcast &&
@@ -550,20 +556,20 @@
         const url =
           window.location.origin +
           window.location.pathname +
-          "#room=" +
-          encodeURIComponent(room);
+          "#list=" +
+          encodeURIComponent(listName);
         navigator.clipboard.writeText(url).then(() => {
           alert("Invite link copied! Open this URL on your second device.");
         });
       }
 
-      function promptChangeRoom() {
-        const newRoom = prompt("Enter room name:", room);
-        if (newRoom && newRoom.trim() !== room) {
-          room = newRoom.trim();
-          localStorage.setItem("pwa_grocery_room", room);
-          window.location.hash = `room=${room}`;
-          document.getElementById("room-id-display").textContent = room;
+      function changeList() {
+        const newList = prompt("Enter list name:", listName);
+        if (newList && newList.trim() !== listName) {
+          listName = newList.trim();
+          localStorage.setItem("pwa_grocery_list", listName);
+          window.location.hash = `list=${listName}`;
+          document.getElementById("list-id-display").textContent = listName;
           initSync();
           renderList();
         }
