@@ -87,3 +87,14 @@ _Avoid_: reload, re-sync
 The finite daily allowance of messages a List's Peers may publish to the shared
 relay. Its conservation shapes which changes propagate in real time and which
 are pulled on demand.
+
+**Backup**:
+A point-in-time file capturing a List's Catalog and Purchase history, named for
+its source List. The only way to move Purchase history off a device.
+_Avoid_: snapshot, save
+
+**Restore**:
+Applying a Backup to a List: Products merge by spelling (the List's existing
+Product wins; the Backup's aliases and presets fold in), Purchase-history
+records dedupe by identity, and nothing is broadcast to Peers.
+_Avoid_: load

@@ -19,7 +19,7 @@ build step, no npm, no tests — keep it that way.
   and users can flip it per device via the drawer toggle (persisted in
   `pwa_grocery_sync`). While off, no ntfy.sh network calls happen — the app runs
   local-only. The drawer also shows a per-device "messages sent today" counter.
-- Service worker is cache-first with hardcoded `CACHE_NAME = "grocery-v16"` in `sw.js`.
+- Service worker is cache-first with hardcoded `CACHE_NAME = "grocery-v18"` in `sw.js`.
   Bump the version AND add any new `js/*.js` file to `ASSETS` when shipping changes,
   or installed clients keep stale assets. ntfy.sh requests deliberately bypass the
   cache.
@@ -40,6 +40,14 @@ build step, no npm, no tests — keep it that way.
   (empty local DB) or the drawer's Refresh action; steady-state reconnects rely on
   the free `since=12h` SSE replay. A 429 publish sets the status pill to
   "Sync limited" until the next success or midnight UTC.
+- Backup/restore lives in `js/backup.js` (configured from `main.js`): a single
+  versioned JSON file exports a List's Catalog + Purchase history; restoring
+  merges local-only — never broadcast — with Products deduped by normalized
+  spelling (existing wins, aliases/presets fold in) and history by
+  (productId, boughtAt, detail); cross-List restores remap IDs (see ADR-0006).
+  Caveat: restoring into an empty DB before the first Sync connection suppresses
+  the automatic fresh-join catch-up pull, so hit the drawer's Refresh afterwards
+  to still fetch live Items/Products from Peers.
 - IndexedDB is `GroceryDB` v3: `items`, `products`, and `purchaseHistory` stores,
   each with a `byList` index. Item/Product IDs are prefixed with the List name
   (`${listName}::…`) so one DB can hold several Lists without cross-talk; on List
@@ -50,4 +58,6 @@ build step, no npm, no tests — keep it that way.
 - Domain vocabulary lives in `CONTEXT.md`, architectural decisions in `docs/adr/`.
   Use that language in code and discussions. Note: Clearing and the
   Purchase-history record (boughtAt timestamp per buy, device-local) are
-  implemented; Catalog merge semantics remain undecided (see ADR-0003).
+  implemented; Catalog merge on import is decided (spelling-dedupe, existing
+  wins — see ADR-0006), while general peer-meeting reconciliation of duplicate
+  Products remains undecided (see ADR-0003).

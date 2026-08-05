@@ -5,6 +5,7 @@
 import * as db from "./db.js";
 import * as sync from "./sync.js";
 import * as catalog from "./catalog.js";
+import * as backup from "./backup.js";
 import * as ui from "./ui.js";
 
 // --- Dev / Sync Toggle ---
@@ -126,6 +127,43 @@ const actions = {
   changeList,
   copyInviteLink,
   refresh: () => sync.publishAction({ type: "REQUEST_SYNC", ts: Date.now() }),
+  exportBackup: async () => {
+    backup.downloadBackup(await backup.buildExport());
+  },
+  importBackup: async (file) => {
+    let data;
+    try {
+      data = JSON.parse(await file.text());
+    } catch (err) {
+      alert("That file isn't a valid backup.");
+      return;
+    }
+    if (
+      !data ||
+      data.version !== backup.FORMAT_VERSION ||
+      typeof data.list !== "string" ||
+      !Array.isArray(data.products) ||
+      !Array.isArray(data.history)
+    ) {
+      alert("That file isn't a valid backup.");
+      return;
+    }
+    const plan = await backup.planImport(data);
+    const s = plan.summary;
+    let msg = `Import backup from "${s.sourceList}" into "${s.targetList}"?\n\n`;
+    if (s.crossList) {
+      msg +=
+        "This backup is from a different list — its records will be remapped to this list.\n\n";
+    }
+    msg +=
+      `Catalog: ${s.productsToAdd} to add, ${s.productsMerged} already present ` +
+      `(${s.aliasesToAdd} aliases, ${s.presetsToAdd} presets to fold in).\n` +
+      `History: ${s.historyToAdd} to add, ${s.historySkipped} duplicates skipped.\n\n` +
+      "Restoring is local — nothing is synced to other devices.";
+    if (!confirm(msg)) return;
+    await backup.applyPlan(plan);
+    renderAll();
+  },
   setSyncEnabled: (value) => {
     localStorage.setItem("pwa_grocery_sync", value ? "1" : "0");
     sync.setSyncEnabled(value);
@@ -241,6 +279,11 @@ catalog.configureCatalog({
   uid,
   getListName: () => listName,
   apply: actions,
+});
+
+backup.configureBackup({
+  uid,
+  getListName: () => listName,
 });
 
 // --- Boot ---

@@ -22,6 +22,10 @@ const ICONS = {
     'M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99',
   trash:
     'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+  download:
+    'M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3',
+  upload:
+    'M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5',
 };
 
 export function icon(name, cls = "w-5 h-5") {
@@ -530,7 +534,11 @@ function bindEvents() {
     if (action === "copy-link") actions.copyInviteLink();
     else if (action === "change-list") actions.changeList();
     else if (action === "refresh") actions.refresh();
-    else if (action === "toggle-sync") actions.setSyncEnabled(!syncEnabled);
+    else if (action === "export-backup") actions.exportBackup();
+    else if (action === "import-backup") {
+      const input = document.getElementById("backup-file-input");
+      if (input) input.click();
+    } else if (action === "toggle-sync") actions.setSyncEnabled(!syncEnabled);
     else if (action === "clear-bought") actions.clearBought();
     else if (action === "remove-item") actions.removeItem(el.dataset.id);
     else if (action === "toggle-bought") actions.toggleBought(el.dataset.id);
@@ -549,6 +557,15 @@ function bindEvents() {
     else if (action === "close-menu") closeMenu();
     else if (action.startsWith("view-")) showView(el.dataset.view);
   });
+
+  const backupInput = document.getElementById("backup-file-input");
+  if (backupInput) {
+    backupInput.addEventListener("change", () => {
+      const file = backupInput.files && backupInput.files[0];
+      if (file) actions.importBackup(file);
+      backupInput.value = "";
+    });
+  }
 }
 
 function escapeHtml(str) {
