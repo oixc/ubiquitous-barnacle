@@ -36,12 +36,20 @@ localStorage.setItem("pwa_grocery_list", listName);
 window.location.hash = `list=${listName}`;
 
 // --- Rendering ---
+let currentView = "list";
+
+function showView(view) {
+  currentView = view;
+  renderAll();
+}
+
 async function renderAll() {
-  const [items, products] = await Promise.all([
+  const [items, products, history] = await Promise.all([
     db.getAll("items", listName),
     db.getAll("products", listName),
+    db.getAll("purchaseHistory", listName),
   ]);
-  ui.renderList({ items, products, listName });
+  ui.renderAll({ items, products, history, listName, view: currentView });
 }
 
 // --- User actions ---
@@ -162,7 +170,7 @@ function boot() {
     });
   }
 
-  ui.init({ actions });
+  ui.init({ actions, showView });
 
   db.initDb()
     .then(() => {

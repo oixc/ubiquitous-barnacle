@@ -28,9 +28,21 @@
         class="bg-slate-900 rounded-2xl p-5 shadow-sm border border-slate-800 mb-4"
       >
         <div class="flex items-center justify-between mb-3">
-          <h1 class="text-xl font-bold text-white tracking-tight">
-            🛒 Grocery List
-          </h1>
+          <div class="flex items-center gap-2">
+            <button
+              data-action="open-menu"
+              id="menu-btn"
+              aria-label="Open menu"
+              title="Menu"
+              aria-expanded="false"
+              class="p-1.5 -ml-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition"
+            >
+              <span data-icon="menu" class="block w-6 h-6"></span>
+            </button>
+            <h1 class="text-xl font-bold text-white tracking-tight">
+              🛒 Grocery List
+            </h1>
+          </div>
           <div
             id="sync-status"
             class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-950/60 text-amber-300"
@@ -72,28 +84,90 @@
         </div>
       </header>
 
-      <!-- Add Item Form -->
-      <form id="add-form" class="flex gap-2 mb-4">
-        <input
-          type="text"
-          id="item-input"
-          placeholder="Add item (e.g. Oat Milk)..."
-          required
-          class="flex-1 px-4 py-3 rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-900 shadow-sm text-sm text-slate-100 placeholder-slate-500"
-        />
-        <button
-          type="submit"
-          aria-label="Add item"
-          title="Add item"
-          class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-xl shadow-sm transition active:scale-95"
-        >
-          <span data-icon="plus" class="block w-5 h-5"></span>
-        </button>
-      </form>
+      <!-- List View -->
+      <section id="view-list">
+        <!-- Add Item Form -->
+        <form id="add-form" class="flex gap-2 mb-4">
+          <input
+            type="text"
+            id="item-input"
+            placeholder="Add item (e.g. Oat Milk)..."
+            required
+            class="flex-1 px-4 py-3 rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-900 shadow-sm text-sm text-slate-100 placeholder-slate-500"
+          />
+          <button
+            type="submit"
+            aria-label="Add item"
+            title="Add item"
+            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-xl shadow-sm transition active:scale-95"
+          >
+            <span data-icon="plus" class="block w-5 h-5"></span>
+          </button>
+        </form>
 
-      <!-- Grocery Items List -->
-      <ul id="grocery-list" class="space-y-2"></ul>
+        <!-- Grocery Items List -->
+        <ul id="grocery-list" class="space-y-2"></ul>
+      </section>
+
+      <!-- Catalog View -->
+      <section id="view-catalog" class="space-y-2 hidden"></section>
+
+      <!-- Purchase History View (device-local) -->
+      <section id="view-history" class="space-y-2 hidden"></section>
     </div>
+
+    <!-- Slide-out Menu -->
+    <div
+      id="drawer-overlay"
+      data-action="close-menu"
+      class="fixed inset-0 z-40 bg-black/50 opacity-0 pointer-events-none transition-opacity duration-200"
+    ></div>
+    <aside
+      id="drawer"
+      aria-label="Menu"
+      class="fixed top-0 left-0 z-50 h-full w-72 bg-slate-900 border-r border-slate-800 shadow-xl flex flex-col transform -translate-x-full transition-transform duration-200"
+    >
+      <div
+        class="flex items-center justify-between p-4 border-b border-slate-800"
+      >
+        <span class="font-semibold text-white">Groceries</span>
+        <button
+          data-action="close-menu"
+          aria-label="Close menu"
+          title="Close"
+          class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+        >
+          <span data-icon="close" class="block w-5 h-5"></span>
+        </button>
+      </div>
+      <nav class="p-2 space-y-1">
+        <button
+          data-action="view-list"
+          data-view="list"
+          aria-current="true"
+          class="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium bg-slate-800 text-white transition"
+        >
+          <span data-icon="cart" class="block w-5 h-5"></span>
+          List
+        </button>
+        <button
+          data-action="view-catalog"
+          data-view="catalog"
+          class="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800 transition"
+        >
+          <span data-icon="book" class="block w-5 h-5"></span>
+          Catalog
+        </button>
+        <button
+          data-action="view-history"
+          data-view="history"
+          class="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800 transition"
+        >
+          <span data-icon="clock" class="block w-5 h-5"></span>
+          Purchase history
+        </button>
+      </nav>
+    </aside>
 
     <script type="module" src="js/main.js"></script>
   </body>

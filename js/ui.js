@@ -3,12 +3,18 @@
 // Events are delegated: elements carry data-action / data-id attributes.
 
 let actions = {};
+let showView = () => {};
 
 // --- Icons (inline SVG, no external library) ---
 const ICONS = {
   plus: 'M12 4v16m8-8H4',
   copy: 'M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z',
   list: 'M4 6h16M4 12h16M4 18h16',
+  menu: 'M4 6h16M4 12h16M4 18h16',
+  close: 'M6 18L18 6M6 6l12 12',
+  cart: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z',
+  book: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
+  clock: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
   trash:
     'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
 };
@@ -19,6 +25,7 @@ export function icon(name, cls = "w-5 h-5") {
 
 export function init(cfg) {
   actions = cfg.actions;
+  showView = cfg.showView;
   injectIcons();
   bindEvents();
 }
@@ -29,6 +36,65 @@ function injectIcons() {
   });
 }
 
+// --- Views ---
+const VIEWS = ["list", "catalog", "history"];
+
+export function renderAll({ items, products, history, listName, view }) {
+  setListName(listName);
+  setActiveNav(view);
+  showSection(view);
+  closeMenu();
+  renderList({ items, products, listName });
+  renderCatalog(products, history);
+  renderHistory(history, products);
+}
+
+function showSection(view) {
+  for (const v of VIEWS) {
+    const el = document.getElementById(`view-${v}`);
+    if (el) el.classList.toggle("hidden", v !== view);
+  }
+}
+
+function setActiveNav(view) {
+  document.querySelectorAll("[data-view]").forEach((btn) => {
+    const active = btn.dataset.view === view;
+    btn.classList.toggle("bg-slate-800", active);
+    btn.classList.toggle("text-white", active);
+    btn.classList.toggle("text-slate-300", !active);
+    btn.setAttribute("aria-current", active ? "true" : "false");
+  });
+}
+
+// --- Slide-out menu ---
+function openMenu() {
+  const drawer = document.getElementById("drawer");
+  if (!drawer) return;
+  drawer.classList.remove("-translate-x-full");
+  drawer.classList.add("translate-x-0");
+  const overlay = document.getElementById("drawer-overlay");
+  overlay.classList.remove("opacity-0", "pointer-events-none");
+  overlay.classList.add("opacity-100", "pointer-events-auto");
+  const menuBtn = document.getElementById("menu-btn");
+  if (menuBtn) menuBtn.setAttribute("aria-expanded", "true");
+}
+
+function closeMenu() {
+  const drawer = document.getElementById("drawer");
+  if (drawer) {
+    drawer.classList.add("-translate-x-full");
+    drawer.classList.remove("translate-x-0");
+  }
+  const overlay = document.getElementById("drawer-overlay");
+  if (overlay) {
+    overlay.classList.add("opacity-0", "pointer-events-none");
+    overlay.classList.remove("opacity-100", "pointer-events-auto");
+  }
+  const menuBtn = document.getElementById("menu-btn");
+  if (menuBtn) menuBtn.setAttribute("aria-expanded", "false");
+}
+
+// --- Sync status ---
 export function setSyncStatus(status) {
   const el = document.getElementById("sync-status");
   if (!el) return;
@@ -65,6 +131,7 @@ export function setListName(listName) {
   if (el) el.textContent = listName;
 }
 
+// --- List view ---
 export function renderList({ items, products, listName }) {
   setListName(listName);
   const productById = new Map(products.map((p) => [p.id, p]));
@@ -121,6 +188,77 @@ export function renderList({ items, products, listName }) {
       .join("");
 }
 
+// --- Catalog view ---
+function renderCatalog(products, history) {
+  const el = document.getElementById("view-catalog");
+  if (!el) return;
+
+  if (products.length === 0) {
+    el.innerHTML = `<p class="text-center py-8 text-slate-500 text-sm">No products yet. Add an item to grow the catalog.</p>`;
+    return;
+  }
+
+  const count = new Map();
+  const lastBought = new Map();
+  for (const h of history) {
+    count.set(h.productId, (count.get(h.productId) || 0) + 1);
+    const prev = lastBought.get(h.productId);
+    if (prev === undefined || h.boughtAt > prev) {
+      lastBought.set(h.productId, h.boughtAt);
+    }
+  }
+
+  const sorted = [...products].sort((a, b) =>
+    a.defaultSpelling.localeCompare(b.defaultSpelling),
+  );
+
+  el.innerHTML = sorted
+    .map((p) => {
+      const times = count.get(p.id) || 0;
+      const last = lastBought.get(p.id);
+      return `
+      <div class="flex items-center justify-between p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition">
+        <div class="min-w-0">
+          <div class="text-sm font-medium text-slate-200">${escapeHtml(p.defaultSpelling)}</div>
+          ${p.aliases && p.aliases.length ? `<div class="mt-1 flex flex-wrap gap-1">${p.aliases.map((a) => `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">${escapeHtml(a)}</span>`).join("")}</div>` : ""}
+        </div>
+        <div class="text-right shrink-0 ml-3">
+          <div class="text-sm text-slate-300">${times}×</div>
+          <div class="text-[10px] text-slate-500">${last ? `last ${new Date(last).toLocaleDateString()}` : "never"}</div>
+        </div>
+      </div>
+    `;
+    })
+    .join("");
+}
+
+// --- Purchase history view (device-local) ---
+function renderHistory(history, products) {
+  const el = document.getElementById("view-history");
+  if (!el) return;
+
+  if (history.length === 0) {
+    el.innerHTML = `<p class="text-center py-8 text-slate-500 text-sm">No purchase history yet.</p>`;
+    return;
+  }
+
+  const productById = new Map(products.map((p) => [p.id, p]));
+  const sorted = [...history].sort((a, b) => b.boughtAt - a.boughtAt);
+
+  el.innerHTML = sorted
+    .map((h) => {
+      const product = productById.get(h.productId);
+      const name = product ? product.defaultSpelling : "…";
+      return `
+      <div class="flex items-center justify-between p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition">
+        <span class="text-sm font-medium text-slate-200">${escapeHtml(name)}</span>
+        <span class="text-xs text-slate-500 shrink-0 ml-3">${escapeHtml(new Date(h.boughtAt).toLocaleString())}</span>
+      </div>
+    `;
+    })
+    .join("");
+}
+
 function bindEvents() {
   document.getElementById("add-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -139,6 +277,9 @@ function bindEvents() {
     else if (action === "change-list") actions.changeList();
     else if (action === "clear-bought") actions.clearBought();
     else if (action === "remove-item") actions.removeItem(el.dataset.id);
+    else if (action === "open-menu") openMenu();
+    else if (action === "close-menu") closeMenu();
+    else if (action.startsWith("view-")) showView(el.dataset.view);
   });
 
   document.addEventListener("change", (e) => {
