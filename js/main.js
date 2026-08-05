@@ -73,16 +73,25 @@ async function addItem(text) {
   if (product) await catalog.addOrReviveItem(product, detail, productChanged);
 }
 
+function switchList(newList) {
+  const trimmed = newList && newList.trim();
+  if (!trimmed || trimmed === listName) return;
+  listName = trimmed;
+  localStorage.setItem("pwa_grocery_list", listName);
+  window.location.hash = `list=${listName}`;
+  sync.initSync();
+  renderAll();
+}
+
 function changeList() {
   const newList = prompt("Enter list name:", listName);
-  if (newList && newList.trim() !== listName) {
-    listName = newList.trim();
-    localStorage.setItem("pwa_grocery_list", listName);
-    window.location.hash = `list=${listName}`;
-    sync.initSync();
-    renderAll();
-  }
+  if (newList) switchList(newList);
 }
+
+window.addEventListener("hashchange", () => {
+  const urlList = getListFromUrl();
+  if (urlList) switchList(urlList);
+});
 
 function copyInviteLink() {
   const url =
