@@ -100,3 +100,43 @@ export async function addOrReviveItem(product) {
   };
   await apply.putItem(item, true);
 }
+
+// --- Purchase suggestions (Restock prompts) ---
+const SUGGEST_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
+const MIN_PURCHASES = 2;
+const MAX_SUGGESTIONS = 5;
+
+export function computeSuggestions({ products, items, history }) {
+  const windowStart = Date.now() - SUGGEST_WINDOW_MS;
+
+  const count = new Map();
+  const lastBought = new Map();
+  for (const h of history) {
+    if (h.boughtAt < windowStart) continue;
+    count.set(h.productId, (count.get(h.productId) || 0) + 1);
+    const prev = lastBought.get(h.productId);
+    if (prev === undefined || h.boughtAt > prev) {
+      lastBought.set(h.productId, h.boughtAt);
+    }
+  }
+
+  const onList = new Set(
+    items.filter((i) => !i.bought).map((i) => i.productId),
+  );
+  const productById = new Map(products.map((p) => [p.id, p]));
+
+  return [...count.entries()]
+    .filter(([productId, times]) => {
+      const product = productById.get(productId);
+      return product && times >= MIN_PURCHASES && !onList.has(productId);
+    })
+    .map(([productId, times]) => ({
+      product: productById.get(productId),
+      count: times,
+      lastBought: lastBought.get(productId),
+    }))
+    .sort(
+      (a, b) => b.count - a.count || b.lastBought - a.lastBought,
+    )
+    .slice(0, MAX_SUGGESTIONS);
+}

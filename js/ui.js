@@ -41,14 +41,37 @@ function injectIcons() {
 // --- Views ---
 const VIEWS = ["list", "catalog", "history"];
 
-export function renderAll({ items, products, history, listName, view }) {
+export function renderAll({ items, products, history, suggestions, listName, view }) {
   setListName(listName);
   setActiveNav(view);
   showSection(view);
   closeMenu();
+  renderSuggestions(suggestions);
   renderList({ items, products, listName });
   renderCatalog(products, history);
   renderHistory(history, products);
+}
+
+function renderSuggestions(suggestions) {
+  const el = document.getElementById("suggestions");
+  if (!el) return;
+  if (!suggestions || suggestions.length === 0) {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = `
+    <div class="flex gap-2 overflow-x-auto pb-1">
+      ${suggestions
+        .map(
+          (s) => `
+        <button data-action="add-suggested" data-id="${s.product.id}" title="Bought ${s.count}×" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full bg-slate-800/80 border border-slate-700 text-xs text-slate-200 hover:bg-slate-700 transition">
+          ${escapeHtml(s.product.defaultSpelling)}
+          ${icon("plus", "w-3.5 h-3.5 text-blue-400")}
+        </button>`,
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 function showSection(view) {
@@ -341,6 +364,7 @@ function bindEvents() {
     else if (action === "clear-bought") actions.clearBought();
     else if (action === "remove-item") actions.removeItem(el.dataset.id);
     else if (action === "rename-product") startRename(el.dataset.id);
+    else if (action === "add-suggested") actions.suggest(el.dataset.id);
     else if (action === "open-menu") openMenu();
     else if (action === "close-menu") closeMenu();
     else if (action.startsWith("view-")) showView(el.dataset.view);

@@ -49,7 +49,8 @@ async function renderAll() {
     db.getAll("products", listName),
     db.getAll("purchaseHistory", listName),
   ]);
-  ui.renderAll({ items, products, history, listName, view: currentView });
+  const suggestions = catalog.computeSuggestions({ products, items, history });
+  ui.renderAll({ items, products, history, suggestions, listName, view: currentView });
 }
 
 // --- User actions ---
@@ -149,6 +150,11 @@ const actions = {
     }
   },
   removeItem: (id) => actions.deleteItem(id, true),
+  suggest: async (productId) => {
+    const products = await db.getAll("products", listName);
+    const product = products.find((p) => p.id === productId);
+    if (product) await catalog.addOrReviveItem(product);
+  },
 };
 
 // --- Wire up modules ---
