@@ -34,6 +34,8 @@ build step, no npm, no tests — keep it that way.
   (`${listName}::…`) so one DB can hold several Lists without cross-talk; on List
   switch, reads are scoped by `listName` and nothing carries over.
 - Tailwind comes from the CDN (`cdn.tailwindcss.com`), not a build pipeline.
+  The app is dark-mode only (slate-950 base); there is no theme switcher and no
+  `dark:` variant usage. Don't reintroduce a light theme or a toggle.
 - Domain vocabulary lives in `CONTEXT.md`, architectural decisions in `docs/adr/`.
   Use that language in code and discussions. Note: Clearing and the
   Purchase-history record (boughtAt timestamp per buy, device-local) are

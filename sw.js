@@ -1,4 +1,4 @@
-const CACHE_NAME = "grocery-v5";
+const CACHE_NAME = "grocery-v6";
 const ASSETS = [
   "./index.html",
   "./manifest.json",

@@ -14,19 +14,19 @@ export function setSyncStatus(status) {
   if (!el) return;
   const states = {
     connected: {
-      cls: "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800",
+      cls: "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-950/60 text-emerald-300",
       html: '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Connected',
     },
     connecting: {
-      cls: "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800",
+      cls: "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-950/60 text-amber-300",
       html: '<span class="w-2 h-2 rounded-full bg-amber-500"></span> Connecting...',
     },
     offline: {
-      cls: "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-100 text-rose-800",
+      cls: "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-950/60 text-rose-300",
       html: '<span class="w-2 h-2 rounded-full bg-rose-500"></span> Offline',
     },
     dev: {
-      cls: "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-200 text-slate-700",
+      cls: "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-300",
       html: '<span class="w-2 h-2 rounded-full bg-slate-400"></span> Dev Mode (Sync Off)',
     },
   };
@@ -51,7 +51,7 @@ export function renderList({ items, products, listName }) {
 
   if (items.length === 0) {
     listEl.innerHTML = `
-      <li class="text-center py-8 text-slate-400 text-sm">
+      <li class="text-center py-8 text-slate-500 text-sm">
         Your list is empty. Add an item above!
       </li>`;
     return;
@@ -60,7 +60,7 @@ export function renderList({ items, products, listName }) {
   const clearRow = boughtCount
     ? `
       <li>
-        <button data-action="clear-bought" class="w-full text-center py-2.5 text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200/70 rounded-xl hover:bg-rose-100 transition">
+        <button data-action="clear-bought" class="w-full text-center py-2.5 text-xs font-semibold text-rose-400 bg-rose-950/40 border border-rose-900/60 rounded-xl hover:bg-rose-950/70 transition">
           Clear bought (${boughtCount})
         </button>
       </li>`
@@ -73,20 +73,20 @@ export function renderList({ items, products, listName }) {
         const product = productById.get(item.productId);
         const text = product ? product.defaultSpelling : "…";
         return `
-      <li class="flex items-center justify-between p-3.5 bg-white rounded-xl border border-slate-200/80 shadow-sm transition">
+      <li class="flex items-center justify-between p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition">
         <label class="flex items-center gap-3 flex-1 cursor-pointer select-none">
           <input
             type="checkbox"
             ${item.bought ? "checked" : ""}
             data-action="toggle-bought"
             data-id="${item.id}"
-            class="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 transition"
+            class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-blue-600 focus:ring-blue-600 transition"
           >
-          <span class="text-sm font-medium ${item.bought ? "line-through text-slate-400" : "text-slate-800"}">
+          <span class="text-sm font-medium ${item.bought ? "line-through text-slate-500" : "text-slate-200"}">
             ${escapeHtml(text)}
           </span>
         </label>
-        <button data-action="remove-item" data-id="${item.id}" class="text-slate-400 hover:text-rose-600 p-1 rounded-lg transition">
+        <button data-action="remove-item" data-id="${item.id}" class="text-slate-500 hover:text-rose-400 p-1 rounded-lg transition">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
           </svg>
