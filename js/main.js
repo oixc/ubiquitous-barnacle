@@ -133,14 +133,14 @@ const actions = {
     if (broadcast) sync.publishAction({ type: "CLEAR_BOUGHT" });
     renderAll();
   },
-  toggleBought: async (id, bought) => {
+  toggleBought: async (id) => {
     const items = await db.getAll("items", listName);
     const item = items.find((i) => i.id === id);
     if (!item) return;
     const wasBought = item.bought;
-    item.bought = bought;
+    item.bought = !wasBought;
     await actions.putItem(item, true);
-    if (bought && !wasBought) {
+    if (item.bought && !wasBought) {
       await actions.putHistory({
         id: `${listName}::${uid("hist_")}`,
         list: listName,

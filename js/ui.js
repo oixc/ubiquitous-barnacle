@@ -176,23 +176,21 @@ export function renderList({ items, products, listName }) {
     const product = productById.get(item.productId);
     const text = product ? product.defaultSpelling : "…";
     const rowCls = item.bought
-      ? "flex items-center justify-between p-3.5 bg-slate-900/50 rounded-xl border border-slate-800/60 shadow-sm transition"
-      : "flex items-center justify-between p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition";
+      ? "flex items-center p-3.5 bg-emerald-950/60 rounded-xl border border-emerald-800/60 shadow-sm transition"
+      : "flex items-center p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition";
     return `
-      <li class="${rowCls}">
-        <label class="flex items-center gap-3 flex-1 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            ${item.bought ? "checked" : ""}
-            data-action="toggle-bought"
-            data-id="${item.id}"
-            class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-blue-600 focus:ring-blue-600 transition"
-          >
+      <li class="flex items-center">
+        <button
+          data-action="toggle-bought"
+          data-id="${item.id}"
+          aria-pressed="${item.bought}"
+          class="${rowCls} flex-1 min-w-0 text-left cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-blue-600"
+        >
           <span class="text-sm font-medium ${item.bought ? "line-through text-slate-500" : "text-slate-200"}">
             ${escapeHtml(text)}
           </span>
-        </label>
-        <button data-action="remove-item" data-id="${item.id}" aria-label="Remove item" title="Remove item" class="text-slate-500 hover:text-rose-400 p-1 rounded-lg transition">
+        </button>
+        <button data-action="remove-item" data-id="${item.id}" aria-label="Remove item" title="Remove item" class="ml-1 text-slate-500 hover:text-rose-400 p-1 rounded-lg transition shrink-0">
           ${icon("trash")}
         </button>
       </li>
@@ -363,16 +361,12 @@ function bindEvents() {
     else if (action === "change-list") actions.changeList();
     else if (action === "clear-bought") actions.clearBought();
     else if (action === "remove-item") actions.removeItem(el.dataset.id);
+    else if (action === "toggle-bought") actions.toggleBought(el.dataset.id);
     else if (action === "rename-product") startRename(el.dataset.id);
     else if (action === "add-suggested") actions.suggest(el.dataset.id);
     else if (action === "open-menu") openMenu();
     else if (action === "close-menu") closeMenu();
     else if (action.startsWith("view-")) showView(el.dataset.view);
-  });
-
-  document.addEventListener("change", (e) => {
-    const el = e.target.closest("[data-action='toggle-bought']");
-    if (el) actions.toggleBought(el.dataset.id, el.checked);
   });
 }
 
