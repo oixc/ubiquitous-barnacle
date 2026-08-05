@@ -10,7 +10,7 @@ directly). `sw.js` is the service worker, `manifest.json` the PWA manifest. No
 build step, no npm, no tests — keep it that way.
 
 ## Run & verify
-- Serve statically, e.g. `python3 -m http.server 8000` — service worker and
+- Serve statically, e.g. `pixi run test-server` — service worker and
   IndexedDB don't work from `file://`.
 - There are no tests, linters, or typechecks. Verify changes manually in the browser.
 
