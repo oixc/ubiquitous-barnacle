@@ -11,3 +11,13 @@ A minimal, privacy-focused Progressive Web App designed for less than 10 person 
 * Zero-Cost Infrastructure: Runs client-side on free static hosts (e.g., GitHub Pages) using free-tier messaging relays.
 * Ad-Free & Private: No ads, third-party trackers, or algorithmic "sponsored suggestions" found in apps like KitchenOwl.
 * Item Frequency & Recommendations: Local history tracking to calculate addition frequencies, helping generate templates and smart restock prompts.
+
+## Todo
+1. list name in burger menu + "change list" icon should be a pencil
+2. change rendered checkbox to a change in background color
+2. UI: a few light animations?
+2. feat: delete product from catalog
+3. details for items. defaults per product. for quantities
+4. order shopping list to reflect typical purchase order
+5. rename in domain model: bought list = recent list. to buy = no name
+6. rework suggestions based on "restock interval" and last purchase
