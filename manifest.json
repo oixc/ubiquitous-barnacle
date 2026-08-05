@@ -1,6 +1,6 @@
 {
-  "name": "Shared Grocery List",
-  "short_name": "Groceries",
+  "name": "Shopping List",
+  "short_name": "Shopping",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
