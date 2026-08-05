@@ -152,7 +152,7 @@ export function setSyncStatus(status) {
 }
 
 export function setListName(listName) {
-  const el = document.getElementById("list-id-display");
+  const el = document.getElementById("drawer-list-name");
   if (el) el.textContent = listName;
 }
 

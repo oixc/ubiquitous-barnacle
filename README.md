@@ -13,7 +13,6 @@ A minimal, privacy-focused Progressive Web App designed for less than 10 person 
 * Item Frequency & Recommendations: Local history tracking to calculate addition frequencies, helping generate templates and smart restock prompts.
 
 ## Todo
-1. list name in burger menu + "change list" icon should be a pencil
 2. change rendered checkbox to a change in background color
 2. UI: a few light animations?
 2. feat: delete product from catalog
