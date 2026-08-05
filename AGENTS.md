@@ -15,9 +15,11 @@ build step, no npm, no tests — keep it that way.
 - There are no tests, linters, or typechecks. Verify changes manually in the browser.
 
 ## Gotchas
-- `DISABLE_SYNC` flag near the top of `js/main.js` is currently `true`
-  (dev mode). While true, no ntfy.sh network calls happen. Set to `false` to test sync.
-- Service worker is cache-first with hardcoded `CACHE_NAME = "grocery-v5"` in `sw.js`.
+- Sync is on by default (`ENABLE_SYNC` near the top of `js/main.js`, `true`),
+  and users can flip it per device via the drawer toggle (persisted in
+  `pwa_grocery_sync`). While off, no ntfy.sh network calls happen — the app runs
+  local-only. The drawer also shows a per-device "messages sent today" counter.
+- Service worker is cache-first with hardcoded `CACHE_NAME = "grocery-v16"` in `sw.js`.
   Bump the version AND add any new `js/*.js` file to `ASSETS` when shipping changes,
   or installed clients keep stale assets. ntfy.sh requests deliberately bypass the
   cache.
@@ -29,6 +31,15 @@ build step, no npm, no tests — keep it that way.
   topic can read/write. `CLEAR_BOUGHT` carries no payload: each Peer removes
   its own bought Items. Purchase history is device-local (never synced). Items
   carry a `bought` boolean field.
+- Sync is budget-conscious (ntfy.sh free tier: 250 messages/day per IP).
+  `PUT_ITEM` always carries its Product (aliases + presets) so Product creation,
+  alias-confirm, and preset-learning ride along instead of separate `PUT_PRODUCT`
+  messages. Standalone `PUT_PRODUCT` is only broadcast for product-only edits
+  (rename, delete, delete-preset, alias-confirm when the Product is already a
+  to-buy Item). Catch-up is on-demand: `REQUEST_SYNC` fires only on a fresh join
+  (empty local DB) or the drawer's Refresh action; steady-state reconnects rely on
+  the free `since=12h` SSE replay. A 429 publish sets the status pill to
+  "Sync limited" until the next success or midnight UTC.
 - IndexedDB is `GroceryDB` v3: `items`, `products`, and `purchaseHistory` stores,
   each with a `byList` index. Item/Product IDs are prefixed with the List name
   (`${listName}::…`) so one DB can hold several Lists without cross-talk; on List

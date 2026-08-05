@@ -115,7 +115,7 @@ export async function matchProduct(text) {
 
 export async function resolveProduct(text, skipNearMiss = false) {
   const exact = await matchProduct(text);
-  if (exact) return exact;
+  if (exact) return { product: exact, productChanged: false };
 
   const listName = getListName();
   const normalized = normalizeText(text);
@@ -135,11 +135,13 @@ export async function resolveProduct(text, skipNearMiss = false) {
   const threshold = normalized.length < 5 ? 1 : 2;
   if (!skipNearMiss && best && bestDist <= threshold) {
     if (confirm(`Did you mean "${best.defaultSpelling}"?`)) {
-      if (!best.aliases.some((a) => normalizeText(a) === normalized)) {
+      const changed = !best.aliases.some((a) => normalizeText(a) === normalized);
+      if (changed) {
         best.aliases.push(text);
-        await apply.putProduct(best, true);
+        // Persist locally; the change rides on the next Item broadcast.
+        await apply.putProduct(best, false);
       }
-      return best;
+      return { product: best, productChanged: changed };
     }
   }
 
@@ -150,23 +152,30 @@ export async function resolveProduct(text, skipNearMiss = false) {
     aliases: [],
     presets: [],
   };
-  await apply.putProduct(product, true);
-  return product;
+  await apply.putProduct(product, false);
+  return { product, productChanged: true };
 }
 
-export async function addOrReviveItem(product, detail = "") {
+export async function addOrReviveItem(product, detail = "", productChanged = false) {
   const listName = getListName();
   const items = await db.getAll("items", listName);
   const existing = items.find((i) => i.productId === product.id && !i.bought);
-  if (existing) return;
+  if (existing) {
+    // No Item message will carry the Product, so product-only changes (e.g. a
+    // freshly confirmed Alias) must broadcast on their own.
+    if (productChanged) await apply.putProduct(product, true);
+    return;
+  }
 
   const bought = items.find((i) => i.productId === product.id && i.bought);
   if (bought) {
     bought.bought = false;
     bought.createdAt = Date.now();
-    if (detail) bought.detail = canonicalizeDetail(product, detail);
+    if (detail) {
+      bought.detail = canonicalizeDetail(product, detail);
+      if (ensurePreset(product, bought.detail)) await apply.putProduct(product, false);
+    }
     await apply.putItem(bought, true);
-    if (ensurePreset(product, bought.detail)) await apply.putProduct(product, true);
     return;
   }
 
@@ -177,17 +186,21 @@ export async function addOrReviveItem(product, detail = "") {
     bought: false,
     createdAt: Date.now(),
   };
-  if (detail) item.detail = canonicalizeDetail(product, detail);
+  if (detail) {
+    item.detail = canonicalizeDetail(product, detail);
+    // Learn the Preset before the Item broadcast so it rides inside the
+    // PUT_ITEM payload instead of a second Product message.
+    if (ensurePreset(product, item.detail)) await apply.putProduct(product, false);
+  }
   await apply.putItem(item, true);
-  if (ensurePreset(product, item.detail)) await apply.putProduct(product, true);
 }
 
 // Sets (or clears) an Item's Detail from the inline editor; canonicalizes
 // against the Product's Presets and learns new Details as Presets.
 export async function setItemDetail(item, product, detail) {
   item.detail = canonicalizeDetail(product, detail);
+  if (ensurePreset(product, item.detail)) await apply.putProduct(product, false);
   await apply.putItem(item, true);
-  if (ensurePreset(product, item.detail)) await apply.putProduct(product, true);
 }
 
 // --- Purchase suggestions (Restock prompts) ---

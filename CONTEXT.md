@@ -76,3 +76,14 @@ _Avoid_: user, member, account, sender
 
 **Invite link**:
 A URL that names a List. Opening it joins that List.
+
+**Refresh**:
+A Peer-initiated pull of the full List state — requesting every connected Peer
+to send its current Items and Products. Manual; covers Peers offline longer
+than the sync window and deliberate Catalog re-pulls.
+_Avoid_: reload, re-sync
+
+**Sync budget**:
+The finite daily allowance of messages a List's Peers may publish to the shared
+relay. Its conservation shapes which changes propagate in real time and which
+are pulled on demand.

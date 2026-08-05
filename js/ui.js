@@ -18,6 +18,8 @@ const ICONS = {
   clock: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
   pencil:
     'M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z',
+  refresh:
+    'M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99',
   trash:
     'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
 };
@@ -43,7 +45,16 @@ function injectIcons() {
 // --- Views ---
 const VIEWS = ["list", "catalog", "history"];
 
-export function renderAll({ items, products, history, suggestions, listName, view }) {
+export function renderAll({
+  items,
+  products,
+  history,
+  suggestions,
+  listName,
+  view,
+  dailyCount,
+  syncEnabled,
+}) {
   setListName(listName);
   setActiveNav(view);
   showSection(view);
@@ -52,6 +63,33 @@ export function renderAll({ items, products, history, suggestions, listName, vie
   renderList({ items, products, listName });
   renderCatalog(products, history);
   renderHistory(history, products);
+  renderSyncControls(dailyCount, syncEnabled);
+}
+
+let syncEnabled = true;
+
+function renderSyncControls(dailyCount, enabled) {
+  syncEnabled = enabled;
+  const countEl = document.getElementById("drawer-sync-count");
+  if (countEl) {
+    countEl.textContent = syncEnabled
+      ? `${dailyCount} ${dailyCount === 1 ? "message" : "messages"} sent today`
+      : "Sync off — changes stay on this device";
+  }
+
+  const toggle = document.getElementById("sync-toggle");
+  if (!toggle) return;
+  const label = toggle.querySelector("[data-sync-toggle-state]");
+  toggle.setAttribute("aria-pressed", String(syncEnabled));
+  if (syncEnabled) {
+    toggle.className =
+      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-950/60 text-emerald-300 border border-emerald-800/60 transition";
+    label.textContent = "On";
+  } else {
+    toggle.className =
+      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 transition";
+    label.textContent = "Off";
+  }
 }
 
 function syncSuggestionsVisibility() {
@@ -155,6 +193,11 @@ export function setSyncStatus(status) {
       cls: "bg-slate-800 text-slate-300",
       dot: "bg-slate-400",
       label: "Sync off",
+    },
+    limited: {
+      cls: "bg-rose-950/60 text-rose-300",
+      dot: "bg-rose-400",
+      label: "Sync limited",
     },
   };
   const s = states[status] || states.connecting;
@@ -486,6 +529,8 @@ function bindEvents() {
     const action = el.dataset.action;
     if (action === "copy-link") actions.copyInviteLink();
     else if (action === "change-list") actions.changeList();
+    else if (action === "refresh") actions.refresh();
+    else if (action === "toggle-sync") actions.setSyncEnabled(!syncEnabled);
     else if (action === "clear-bought") actions.clearBought();
     else if (action === "remove-item") actions.removeItem(el.dataset.id);
     else if (action === "toggle-bought") actions.toggleBought(el.dataset.id);

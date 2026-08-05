@@ -8,7 +8,7 @@ import * as catalog from "./catalog.js";
 import * as ui from "./ui.js";
 
 // --- Dev / Sync Toggle ---
-const DISABLE_SYNC = true; // Set to false when ready to test real-time sync again
+const ENABLE_SYNC = true; // Shipped default; the in-app toggle overrides per device
 
 // --- List & Peer Setup ---
 const PEER_ID = "usr_" + Math.random().toString(36).substring(2, 9);
@@ -50,15 +50,27 @@ async function renderAll() {
     db.getAll("purchaseHistory", listName),
   ]);
   const suggestions = catalog.computeSuggestions({ products, items, history });
-  ui.renderAll({ items, products, history, suggestions, listName, view: currentView });
+  ui.renderAll({
+    items,
+    products,
+    history,
+    suggestions,
+    listName,
+    view: currentView,
+    dailyCount: sync.getDailyCount(),
+    syncEnabled: sync.isSyncEnabled(),
+  });
 }
 
 // --- User actions ---
 async function addItem(text) {
   const { productText, detail, skipNearMiss } =
     await catalog.splitProductDetail(text);
-  const product = await catalog.resolveProduct(productText, skipNearMiss);
-  if (product) await catalog.addOrReviveItem(product, detail);
+  const { product, productChanged } = await catalog.resolveProduct(
+    productText,
+    skipNearMiss,
+  );
+  if (product) await catalog.addOrReviveItem(product, detail, productChanged);
 }
 
 function changeList() {
@@ -104,10 +116,22 @@ const actions = {
   },
   changeList,
   copyInviteLink,
+  refresh: () => sync.publishAction({ type: "REQUEST_SYNC" }),
+  setSyncEnabled: (value) => {
+    localStorage.setItem("pwa_grocery_sync", value ? "1" : "0");
+    sync.setSyncEnabled(value);
+    renderAll();
+  },
 
   putItem: async (item, broadcast = true) => {
     await db.put("items", item);
-    if (broadcast) sync.publishAction({ type: "PUT_ITEM", item });
+    if (broadcast) {
+      // Coupled transport: always attach the Item's Product so Peers can render
+      // the Item (and its aliases/presets) without a separate Product message.
+      const products = await db.getAll("products", listName);
+      const product = products.find((p) => p.id === item.productId) || null;
+      sync.publishAction({ type: "PUT_ITEM", item, product });
+    }
     renderAll();
   },
   deleteItem: async (id, broadcast = true) => {
@@ -199,7 +223,7 @@ const actions = {
 sync.configureSync({
   getListName: () => listName,
   peerId: PEER_ID,
-  disabled: DISABLE_SYNC,
+  enabled: ENABLE_SYNC && localStorage.getItem("pwa_grocery_sync") !== "0",
   onStatus: (status) => ui.setSyncStatus(status),
   apply: actions,
 });
