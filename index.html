@@ -54,15 +54,19 @@
           <div class="flex gap-1.5">
             <button
               data-action="copy-link"
-              class="bg-blue-600 text-white px-2.5 py-1 rounded-lg font-medium hover:bg-blue-700 transition active:scale-95"
+              aria-label="Copy invite link"
+              title="Copy invite link"
+              class="bg-blue-600 text-white p-2 rounded-lg font-medium hover:bg-blue-700 transition active:scale-95"
             >
-              📋 Copy Link
+              <span data-icon="copy" class="block w-5 h-5"></span>
             </button>
             <button
               data-action="change-list"
-              class="bg-slate-800 text-slate-200 px-2 py-1 rounded-lg font-medium hover:bg-slate-700 transition"
+              aria-label="Change list"
+              title="Change list"
+              class="bg-slate-800 text-slate-200 p-2 rounded-lg font-medium hover:bg-slate-700 transition"
             >
-              Change
+              <span data-icon="list" class="block w-5 h-5"></span>
             </button>
           </div>
         </div>
@@ -79,9 +83,11 @@
         />
         <button
           type="submit"
-          class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-3 rounded-xl shadow-sm transition active:scale-95 text-sm"
+          aria-label="Add item"
+          title="Add item"
+          class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-xl shadow-sm transition active:scale-95"
         >
-          Add
+          <span data-icon="plus" class="block w-5 h-5"></span>
         </button>
       </form>
 
