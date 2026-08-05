@@ -22,3 +22,6 @@ npm, no tests — keep it that way.
   `DELETE_ITEM`, `REQUEST_SYNC`, `FULL_SYNC`; own messages filtered via `SENDER_ID`.
   Rooms have no auth — anyone who knows the topic can read/write.
 - Tailwind comes from the CDN (`cdn.tailwindcss.com`), not a build pipeline.
+- Domain vocabulary lives in `CONTEXT.md`, architectural decisions in `docs/adr/`.
+  Use that language in code and discussions; note the model is ahead of the code
+  (Catalog, Products, clearing, and revival are not implemented yet).
