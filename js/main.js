@@ -107,6 +107,13 @@ const actions = {
     if (broadcast) sync.publishAction({ type: "DELETE_PRODUCT", id });
     renderAll();
   },
+  renameProduct: async (productId, newSpelling) => {
+    const products = await db.getAll("products", listName);
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+    product.defaultSpelling = newSpelling;
+    await actions.putProduct(product, true);
+  },
   putHistory: async (record) => {
     await db.put("purchaseHistory", record);
     renderAll();
