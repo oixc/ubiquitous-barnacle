@@ -8,3 +8,9 @@ shared vocabulary). Near-miss spellings become aliases only after the typist
 confirms; novel text creates a new Product whose first spelling is the default,
 changeable later by an explicit rename. The Catalog is per-List and syncs like
 Items do.
+
+## Open questions
+- **Catalog merge on meeting**: two Peers can create different Product IDs for
+  the same spelling concurrently. Merge semantics are undecided — currently a
+  Peer resolves an unknown `productId` by re-requesting `FULL_SYNC`, but there is
+  no reconciliation of duplicate Products.
