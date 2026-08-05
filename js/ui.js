@@ -139,10 +139,6 @@ export function renderList({ items, products, listName }) {
   const productById = new Map(products.map((p) => [p.id, p]));
   const listEl = document.getElementById("grocery-list");
 
-  items.sort((a, b) => a.bought - b.bought || b.createdAt - a.createdAt);
-
-  const boughtCount = items.filter((i) => i.bought).length;
-
   if (items.length === 0) {
     listEl.innerHTML = `
       <li class="text-center py-8 text-slate-500 text-sm">
@@ -151,24 +147,16 @@ export function renderList({ items, products, listName }) {
     return;
   }
 
-  const clearRow = boughtCount
-    ? `
-      <li>
-        <button data-action="clear-bought" class="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-rose-400 bg-rose-950/40 border border-rose-900/60 rounded-xl hover:bg-rose-950/70 transition">
-          ${icon("trash", "w-4 h-4")}
-          Clear (${boughtCount})
-        </button>
-      </li>`
-    : "";
+  items.sort((a, b) => b.createdAt - a.createdAt);
 
-  listEl.innerHTML =
-    clearRow +
-    items
-      .map((item) => {
-        const product = productById.get(item.productId);
-        const text = product ? product.defaultSpelling : "…";
-        return `
-      <li class="flex items-center justify-between p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition">
+  const itemRow = (item) => {
+    const product = productById.get(item.productId);
+    const text = product ? product.defaultSpelling : "…";
+    const rowCls = item.bought
+      ? "flex items-center justify-between p-3.5 bg-slate-900/50 rounded-xl border border-slate-800/60 shadow-sm transition"
+      : "flex items-center justify-between p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition";
+    return `
+      <li class="${rowCls}">
         <label class="flex items-center gap-3 flex-1 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -186,8 +174,37 @@ export function renderList({ items, products, listName }) {
         </button>
       </li>
     `;
-      })
-      .join("");
+  };
+
+  const sectionHeader = (label, count, extra = "") => `
+    <li class="flex items-center justify-between pt-2 pb-1">
+      <div class="flex items-baseline gap-2">
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">${label}</h2>
+        <span class="text-xs text-slate-600">${count}</span>
+      </div>
+      ${extra}
+    </li>
+  `;
+
+  const open = items.filter((i) => !i.bought);
+  const bought = items.filter((i) => i.bought);
+
+  const openSection = open.length
+    ? sectionHeader("To buy", open.length) + open.map(itemRow).join("")
+    : "";
+
+  const boughtSection = bought.length
+    ? sectionHeader(
+        "Bought",
+        bought.length,
+        `<button data-action="clear-bought" aria-label="Clear bought items" title="Clear bought items" class="flex items-center gap-1 text-xs font-semibold text-rose-400 hover:text-rose-300 transition">
+          ${icon("trash", "w-3.5 h-3.5")}
+          Clear
+        </button>`,
+      ) + bought.map(itemRow).join("")
+    : "";
+
+  listEl.innerHTML = openSection + boughtSection;
 }
 
 // --- Catalog view ---
