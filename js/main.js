@@ -9,7 +9,7 @@ import * as backup from "./backup.js";
 import * as ui from "./ui.js";
 
 // --- Dev / Sync Toggle ---
-const ENABLE_SYNC = true; // Shipped default; the in-app toggle overrides per device
+const ENABLE_SYNC = false; // Shipped default; the in-app toggle overrides per device
 
 // --- List & Peer Setup ---
 const PEER_ID = "usr_" + Math.random().toString(36).substring(2, 9);
