@@ -1,0 +1,12 @@
+[workspace]
+authors = ["oixc <jan.h.hofmann@googlemail.com>"]
+channels = ["conda-forge"]
+name = "shopping-list"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+test-server = "python -m http.server 8000"
+
+[dependencies]
+python = ">=3.14.6,<3.15"
