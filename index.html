@@ -90,6 +90,9 @@
     </div>
 
     <script>
+      // --- Dev / Sync Toggle ---
+      const DISABLE_SYNC = true; // Set to false when ready to test real-time sync again
+
       // --- Register Service Worker for PWA Installation ---
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
@@ -189,9 +192,21 @@
       }
 
       function initSync() {
-        if (eventSource) eventSource.close();
-        updateStatusUI("connecting");
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
 
+        if (DISABLE_SYNC) {
+          const el = document.getElementById("sync-status");
+          el.className =
+            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-200 text-slate-700";
+          el.innerHTML =
+            '<span class="w-2 h-2 rounded-full bg-slate-400"></span> Dev Mode (Sync Off)';
+          return;
+        }
+
+        updateStatusUI("connecting");
         const sseUrl = `https://ntfy.sh/${encodeURIComponent(room)}/sse?since=12h`;
         eventSource = new EventSource(sseUrl);
 
@@ -218,6 +233,8 @@
       }
 
       async function publishAction(action) {
+        if (DISABLE_SYNC) return; // Prevent network requests during dev
+
         action.senderId = SENDER_ID;
         try {
           await fetch(`https://ntfy.sh/${encodeURIComponent(room)}`, {
