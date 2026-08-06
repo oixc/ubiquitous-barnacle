@@ -1,8 +1,8 @@
 // js/catalog.js — Product resolution, Item creation, and suggestion logic.
 // Text-matching helpers, the resolve/add flow, restock prompts (ADR-0008),
-// added-together sessions (09), soft-priority ranking (11), and undo
-// classification. Reads IndexedDB directly; Product writes go through the
-// injected `apply` actions.
+// added-together sessions (09), typical purchase order (06), soft-priority
+// ranking (11), and undo classification. Reads IndexedDB directly; Product
+// writes go through the injected `apply` actions.
 
 import * as db from "./db.js";
 
@@ -206,8 +206,19 @@ const MIN_COOCCUR_SESSIONS = 3;
 const PIVOT_WINDOW_MS = 2 * 60 * 1000;
 const TRIP_WINDOW_MS = 60 * 60 * 1000;
 
+// Median of an array of values (mean of the two central values on an even
+// count); null for an empty array.
+export function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  if (sorted.length === 0) return null;
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) return sorted[mid];
+  return (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
 // Median of the gaps between consecutive ascending timestamps; null when fewer
-// than two timestamps give no gap at all.
+// than two timestamps give no gap at all. Deliberately keeps the upper-middle
+// gap on an even count (restock intervals predate the shared `median` helper).
 export function medianGap(times) {
   const sorted = [...times].sort((a, b) => a - b);
   if (sorted.length < 2) return null;
@@ -245,23 +256,70 @@ export async function refreshProductRestock(productId) {
   await apply.putProduct(product, false);
 }
 
-// Segments add events (sorted by `at`) into adding sessions: a new session
-// starts when the gap to the previous add exceeds gapMs. Each Product
-// contributes at most once per session (a same-session re-add never
-// double-counts).
-export function groupAddingSessions(addEvents, gapMs = SESSION_GAP_MS) {
-  const sorted = [...addEvents].sort((a, b) => a.at - b.at);
-  const sessions = [];
+// --- Typical purchase order (06) ---
+// The to-buy List is sorted by each Product's typical position within a shopping
+// trip, learned from purchase events. Purchases are segmented into trips by a
+// time gap; a Product's position in a trip is its first check-off index
+// normalized to [0,1), and its typical position is the median across the trips
+// it appears in. Only Products bought in at least MIN_TRIPS_FOR_POSITION trips
+// count as learned; the rest fall back to recency, appended after the learned
+// ones (the UI owns the sort).
+const TRIP_SEGMENT_GAP_MS = 60 * 60 * 1000;
+const MIN_TRIPS_FOR_POSITION = 2;
+
+// Map<productId, normalized median position> for Products learned across
+// MIN_TRIPS_FOR_POSITION trips; Products absent from the Map are unlearned.
+export function computeTripPositions(events) {
+  const purchases = (events || []).filter((e) => e.kind === "purchase");
+  const trips = segmentEvents(purchases, TRIP_SEGMENT_GAP_MS);
+
+  const samples = new Map(); // productId -> number[] of normalized positions
+  for (const trip of trips) {
+    const order = [];
+    const seen = new Set();
+    for (const e of trip) {
+      if (seen.has(e.productId)) continue; // first check-off in a trip wins
+      seen.add(e.productId);
+      order.push(e.productId);
+    }
+    if (order.length < 2) continue; // a single-product trip orders nothing
+    const size = order.length;
+    order.forEach((productId, index) => {
+      const arr = samples.get(productId) || [];
+      arr.push(index / size);
+      samples.set(productId, arr);
+    });
+  }
+
+  const positions = new Map();
+  for (const [productId, values] of samples) {
+    if (values.length < MIN_TRIPS_FOR_POSITION) continue;
+    positions.set(productId, median(values));
+  }
+  return positions;
+}
+
+// Segments events (sorted by `at`) into bursts: a new burst starts when the gap
+// to the previous event exceeds gapMs. Shared by adding sessions (09) and
+// shopping trips (06); consumers do their own per-burst processing.
+function segmentEvents(events, gapMs) {
+  const sorted = [...events].sort((a, b) => a.at - b.at);
+  const bursts = [];
   let current = [];
   for (const e of sorted) {
     if (current.length && e.at - current[current.length - 1].at > gapMs) {
-      sessions.push(current);
+      bursts.push(current);
       current = [];
     }
     current.push(e);
   }
-  if (current.length) sessions.push(current);
-  return sessions;
+  if (current.length) bursts.push(current);
+  return bursts;
+}
+
+// Adding sessions (09): segments of add events for added-together counting.
+export function groupAddingSessions(addEvents, gapMs = SESSION_GAP_MS) {
+  return segmentEvents(addEvents, gapMs);
 }
 
 // Counts how many adding sessions each pair of Products co-occurred in. The

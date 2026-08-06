@@ -54,6 +54,7 @@ export function renderAll({
   products,
   history,
   suggestions,
+  tripPositions,
   listName,
   view,
   dailyCount,
@@ -64,7 +65,7 @@ export function renderAll({
   showSection(view);
   closeMenu();
   renderSuggestions(suggestions);
-  renderList({ items, products, listName });
+  renderList({ items, products, listName, tripPositions });
   renderCatalog(products, history);
   renderHistory(history, products);
   renderSyncControls(dailyCount, syncEnabled);
@@ -264,7 +265,7 @@ let listItems = [];
 let prevItemIds = new Set();
 let listInitialized = false;
 
-export function renderList({ items, products, listName }) {
+export function renderList({ items, products, listName, tripPositions }) {
   setListName(listName);
   const productById = new Map(products.map((p) => [p.id, p]));
   const listEl = document.getElementById("grocery-list");
@@ -279,7 +280,16 @@ export function renderList({ items, products, listName }) {
     return;
   }
 
-  items.sort((a, b) => b.createdAt - a.createdAt);
+  // Typical purchase order (06): Products with a learned position sort first,
+  // in trip order; the rest keep the recency order and trail the learned ones.
+  // Equal positions (and everything unlearned) fall back to recency.
+  const positions = tripPositions || new Map();
+  items.sort((a, b) => {
+    const pa = positions.get(a.productId) ?? Infinity;
+    const pb = positions.get(b.productId) ?? Infinity;
+    if (pa !== pb) return pa - pb;
+    return b.createdAt - a.createdAt;
+  });
   listItems = items;
 
   const nextIds = new Set(items.map((i) => i.id));

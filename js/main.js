@@ -62,11 +62,13 @@ async function renderAll() {
     items,
     events: history,
   });
+  const tripPositions = catalog.computeTripPositions(history);
   ui.renderAll({
     items,
     products,
     history,
     suggestions,
+    tripPositions,
     listName,
     view: currentView,
     dailyCount: sync.getDailyCount(),
