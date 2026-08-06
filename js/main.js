@@ -35,6 +35,17 @@ window.location.hash = `list=${listName}`;
 // --- Rendering ---
 let currentView = "list";
 
+// Re-renders when a suggestion context window (added-together pivot, trip
+// window) lapses, so expired regimes leave the strip without waiting for the
+// next user action. Reset on every render; null expiresAt schedules nothing.
+let rankingRefreshTimer = null;
+
+function scheduleRankingRefresh(expiresAt) {
+  clearTimeout(rankingRefreshTimer);
+  if (expiresAt == null) return;
+  rankingRefreshTimer = setTimeout(() => renderAll(), Math.max(0, expiresAt - Date.now()));
+}
+
 function showView(view) {
   currentView = view;
   renderAll();
@@ -46,7 +57,11 @@ async function renderAll() {
     db.getAll("products", listName),
     db.getAll("events", listName),
   ]);
-  const suggestions = catalog.computeSuggestions({ products, items });
+  const { suggestions, expiresAt } = catalog.computeSuggestions({
+    products,
+    items,
+    events: history,
+  });
   ui.renderAll({
     items,
     products,
@@ -57,6 +72,7 @@ async function renderAll() {
     dailyCount: sync.getDailyCount(),
     syncEnabled: sync.isSyncEnabled(),
   });
+  scheduleRankingRefresh(expiresAt);
 }
 
 // --- User actions ---

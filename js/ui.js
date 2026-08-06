@@ -133,6 +133,23 @@ function formatInterval(ms) {
   return `every ${Math.round(months)} months`;
 }
 
+function suggestionChip(s) {
+  const p = s.product;
+  let title;
+  if (s.kind === "pivot") {
+    title = `Added together ${s.count}×`;
+  } else if (s.kind === "fresh") {
+    title = `Bought ${new Date(s.at).toLocaleTimeString()}`;
+  } else {
+    title = `Restock every ${formatInterval(s.interval)} · due ${new Date(s.dueAt).toLocaleDateString()}`;
+  }
+  return `
+    <button data-action="add-suggested" data-id="${p.id}" title="${escapeHtml(title)}" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/40 text-xs text-amber-200 hover:bg-amber-900/40 transition active:scale-95 motion-reduce:transition-none motion-reduce:transform-none">
+      ${escapeHtml(p.defaultSpelling)}
+      ${icon("plus", "w-3.5 h-3.5 text-amber-300")}
+    </button>`;
+}
+
 function renderSuggestionStrip() {
   const el = document.getElementById("suggestions");
   if (!el) return;
@@ -142,17 +159,8 @@ function renderSuggestionStrip() {
     return;
   }
   el.innerHTML = `
-    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Buy again</div>
     <div class="flex flex-wrap gap-2">
-      ${visible
-        .map(
-          (s) => `
-        <button data-action="add-suggested" data-id="${s.product.id}" title="Restock every ${formatInterval(s.interval)} · due ${new Date(s.dueAt).toLocaleDateString()}" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/40 text-xs text-amber-200 hover:bg-amber-900/40 transition active:scale-95 motion-reduce:transition-none motion-reduce:transform-none">
-          ${escapeHtml(s.product.defaultSpelling)}
-          ${icon("plus", "w-3.5 h-3.5 text-amber-300")}
-        </button>`,
-        )
-        .join("")}
+      ${visible.map(suggestionChip).join("")}
     </div>
   `;
 }

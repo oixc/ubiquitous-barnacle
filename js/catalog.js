@@ -1,6 +1,7 @@
 // js/catalog.js — Product resolution, Item creation, and suggestion logic.
-// Text-matching helpers, the resolve/add flow, restock prompts (ADR-0008), and
-// undo classification. Reads IndexedDB directly; Product writes go through the
+// Text-matching helpers, the resolve/add flow, restock prompts (ADR-0008),
+// added-together sessions (09), soft-priority ranking (11), and undo
+// classification. Reads IndexedDB directly; Product writes go through the
 // injected `apply` actions.
 
 import * as db from "./db.js";
@@ -195,6 +196,16 @@ export async function setItemDetail(item, product, detail) {
 const MAX_SUGGESTIONS = 20;
 const UNDO_WINDOW_MS = 10 * 60 * 1000;
 
+// --- Added-together (09): co-occurrence over adding sessions ---
+// Adds are segmented into adding sessions (bursts separated by a time gap) and
+// a pair of Products qualifies as added-together only after co-occurring in at
+// least MIN_COOCCUR_SESSIONS sessions (noise guard). The trip window (11) is
+// the span after a check-off during which the Product stays a fresh suggestion.
+const SESSION_GAP_MS = 30 * 60 * 1000;
+const MIN_COOCCUR_SESSIONS = 3;
+const PIVOT_WINDOW_MS = 2 * 60 * 1000;
+const TRIP_WINDOW_MS = 60 * 60 * 1000;
+
 // Median of the gaps between consecutive ascending timestamps; null when fewer
 // than two timestamps give no gap at all.
 export function medianGap(times) {
@@ -234,15 +245,135 @@ export async function refreshProductRestock(productId) {
   await apply.putProduct(product, false);
 }
 
-// Restock-due suggestions: reads the stats stored on each Product (no history
-// recompute). A Product is due when its restock interval has elapsed since its
-// last purchase; frequent-but-not-yet-due Products are suppressed. Ranking is
-// by due date (most overdue first), ties by shorter interval.
-export function computeSuggestions({ products, items }) {
+// Segments add events (sorted by `at`) into adding sessions: a new session
+// starts when the gap to the previous add exceeds gapMs. Each Product
+// contributes at most once per session (a same-session re-add never
+// double-counts).
+export function groupAddingSessions(addEvents, gapMs = SESSION_GAP_MS) {
+  const sorted = [...addEvents].sort((a, b) => a.at - b.at);
+  const sessions = [];
+  let current = [];
+  for (const e of sorted) {
+    if (current.length && e.at - current[current.length - 1].at > gapMs) {
+      sessions.push(current);
+      current = [];
+    }
+    current.push(e);
+  }
+  if (current.length) sessions.push(current);
+  return sessions;
+}
+
+// Counts how many adding sessions each pair of Products co-occurred in. The
+// result maps every Product to its per-companion counts, so both orderings of a
+// pair are stored under the two Products and no id-format parsing is needed.
+export function coOccurrenceCounts(sessions) {
+  const counts = new Map();
+  for (const session of sessions) {
+    const products = [...new Set(session.map((e) => e.productId))];
+    for (let i = 0; i < products.length; i++) {
+      for (let j = i + 1; j < products.length; j++) {
+        for (const [a, b] of [
+          [products[i], products[j]],
+          [products[j], products[i]],
+        ]) {
+          let row = counts.get(a);
+          if (!row) {
+            row = new Map();
+            counts.set(a, row);
+          }
+          row.set(b, (row.get(b) || 0) + 1);
+        }
+      }
+    }
+  }
+  return counts;
+}
+
+// Companion Products of `productId` that co-occurred with it in at least
+// `minSessions` adding sessions, most-often-first (noise guard).
+export function addedTogetherWith(
+  productId,
+  sessions,
+  minSessions = MIN_COOCCUR_SESSIONS,
+) {
+  const row = coOccurrenceCounts(sessions).get(productId) || new Map();
+  const companions = [];
+  for (const [other, count] of row) {
+    if (count >= minSessions) companions.push({ productId: other, count });
+  }
+  return companions.sort((a, b) => b.count - a.count);
+}
+
+// Latest event satisfying `match` (any when omitted), or null.
+function latestEvent(events, match) {
+  let latest = null;
+  for (const e of events) {
+    if (match && !match(e)) continue;
+    if (!latest || e.at > latest.at) latest = e;
+  }
+  return latest;
+}
+
+// Context-aware suggestions (09 + 11). Three regimes, highest priority first:
+//   pivot   — an Item added within the pivot window surfaces its added-together
+//             companions (09); derived from the most recent add event so local
+//             and remote adds both pivot, while an Undo re-add (which records
+//             no event) never does. The triggering Item must still be on the
+//             List — a check-off ends the pivot.
+//   fresh   — check-offs within the trip window top the strip, newest first (11).
+//   restock — restock-due Products (05) fill the rest and dominate when there
+//             are no fresh check-offs or pivot companions.
+// With no data each regime is empty and the ranking falls through to the next —
+// a silent no-op. Co-occurrence counting only runs while a pivot is active.
+// Returns { suggestions, expiresAt }: `expiresAt` is the soonest moment a
+// visible regime lapses (so the caller can re-render), or null when the strip
+// is static.
+export function computeSuggestions({ products, items, events }) {
+  const history = events || [];
   const onList = new Set(items.map((i) => i.productId));
+  const productById = new Map(products.map((p) => [p.id, p]));
   const now = Date.now();
 
-  return products
+  const ranked = [];
+  let expiresAt = null;
+
+  const adds = history.filter((e) => e.kind === "add");
+  const latestAdd = latestEvent(adds);
+  if (
+    latestAdd &&
+    onList.has(latestAdd.productId) &&
+    now - latestAdd.at <= PIVOT_WINDOW_MS
+  ) {
+    const companions = addedTogetherWith(
+      latestAdd.productId,
+      groupAddingSessions(adds),
+    );
+    for (const c of companions) {
+      const product = productById.get(c.productId);
+      if (!product || onList.has(c.productId)) continue;
+      ranked.push({ product, kind: "pivot", count: c.count });
+      expiresAt = latestAdd.at + PIVOT_WINDOW_MS;
+    }
+  }
+
+  const fresh = history
+    .filter((e) => e.kind === "purchase" && now - e.at <= TRIP_WINDOW_MS)
+    .sort((a, b) => b.at - a.at);
+  const freshByProduct = new Map();
+  for (const e of fresh) {
+    if (onList.has(e.productId) || freshByProduct.has(e.productId)) continue;
+    freshByProduct.set(e.productId, e);
+  }
+  for (const e of freshByProduct.values()) {
+    const product = productById.get(e.productId);
+    if (!product) continue;
+    ranked.push({ product, kind: "fresh", at: e.at });
+    const freshEnd = e.at + TRIP_WINDOW_MS;
+    if (!expiresAt || freshEnd < expiresAt) expiresAt = freshEnd;
+  }
+
+  const restock = products
     .filter((p) => {
       if (onList.has(p.id)) return false;
       if (!p.restockInterval || p.lastPurchase == null) return false;
@@ -250,14 +381,22 @@ export function computeSuggestions({ products, items }) {
     })
     .map((p) => ({
       product: p,
+      kind: "restock",
       interval: p.restockInterval,
       dueAt: p.lastPurchase + p.restockInterval,
     }))
-    .sort(
-      (a, b) =>
-        a.dueAt - b.dueAt || a.interval - b.interval,
-    )
-    .slice(0, MAX_SUGGESTIONS);
+    .sort((a, b) => a.dueAt - b.dueAt || a.interval - b.interval);
+
+  // Dedupe across regimes (first occurrence wins — higher priority), cap total.
+  const seen = new Set();
+  const result = [];
+  for (const s of [...ranked, ...restock]) {
+    if (seen.has(s.product.id)) continue;
+    seen.add(s.product.id);
+    result.push(s);
+    if (result.length >= MAX_SUGGESTIONS) break;
+  }
+  return { suggestions: result, expiresAt };
 }
 
 // Undo classification (ADR-0008): re-adding a Product whose most recent purchase
@@ -272,11 +411,10 @@ export function computeSuggestions({ products, items }) {
 export async function cancelUndoIfFresh(productId) {
   const listName = getListName();
   const events = await db.getAll("events", listName);
-  let latest = null;
-  for (const e of events) {
-    if (e.kind !== "purchase" || e.productId !== productId) continue;
-    if (!latest || e.at > latest.at) latest = e;
-  }
+  const latest = latestEvent(
+    events,
+    (e) => e.kind === "purchase" && e.productId === productId,
+  );
   if (!latest || Date.now() - latest.at > UNDO_WINDOW_MS) return false;
   await db.remove("events", latest.id);
   return true;

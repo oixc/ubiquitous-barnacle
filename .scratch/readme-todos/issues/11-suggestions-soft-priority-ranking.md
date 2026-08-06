@@ -11,7 +11,15 @@ dominate. When an Item is added, the chips pivot to its added-together companion
 
 **Status:** ready-for-agent
 
-- [ ] Trip window heuristic: any check-off within ~60 minutes tops the strip, newest first.
-- [ ] Restock-due Products (05) fill the remaining slots and dominate when there are no recent check-offs.
-- [ ] Added-together pivot (09) tops the strip briefly after an add, then the ranking resumes.
-- [ ] "Buy again" label and count-based ranking removed.
+- [x] Trip window heuristic: any check-off within ~60 minutes tops the strip, newest first.
+- [x] Restock-due Products (05) fill the remaining slots and dominate when there are no recent check-offs.
+- [x] Added-together pivot (09) tops the strip briefly after an add, then the ranking resumes.
+- [x] "Buy again" label and count-based ranking removed.
+
+## Comments
+
+Implemented after 09 in the same pass. `computeSuggestions` now ranks three regimes —
+pivot (09) > fresh check-offs within `TRIP_WINDOW_MS` (60 min), newest first > restock-due
+(05) — deduped by Product across regimes and capped at 20. The strip's static "Buy again"
+header is removed; chips carry a kind-aware tooltip (`Added together N×`, `Bought <time>`,
+`Restock every … · due …`). Count-based ranking was already gone (05).

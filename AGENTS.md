@@ -70,9 +70,11 @@ build migration mechanisms.
   Use that language in code and discussions. The bought shelf and Clearing are
   gone: checking off removes the Item and records a Purchase (ADR-0007), and the
   device-local `events` store derives add/purchase history from the message
-  stream with a 10-minute Undo (ADR-0008). Suggestions are still count-based;
-  soft-priority ranking (trip window, restock-due, added-together) is pending
-  (issues 05, 09, 11). Catalog merge on import is
+  stream with a 10-minute Undo (ADR-0008). Suggestion ranking is soft-priority
+  (issues 05, 09, 11): fresh check-offs during a trip (60-minute window) top the
+  strip, restock-due prompts fill in, and an add briefly pivots the strip to its
+  added-together companions (≥3 co-occurring sessions, 30-minute session gap).
+  Catalog merge on import is
   decided (spelling-dedupe, existing wins — see ADR-0006), while general
   peer-meeting reconciliation of duplicate Products remains undecided (see
   ADR-0003).
