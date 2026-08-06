@@ -2,6 +2,19 @@
 
 A minimal, privacy-focused Progressive Web App designed for less than 10 person shared grocery management. Built as a zero-build static site using standard HTML/JS, Tailwind CSS, IndexedDB, and ntfy.sh for low-data sync.
 
+## Ideal User Experience
+Two core actions:
+1. adding items (plus details) to the shopping list
+2. buying items from the shopping list
+Both actions should be seamless and no-friction in the fastest time with minimal clicks. 
+
+For example:
+1. The app suggests the right items to add to minimize mental load of creating a shopping list. 
+    * common items repeat in predictable intervals
+    * some items are typically bought together
+    * details like quantity and brand don't change a lot
+2. The shopping list is ordered in the usual way items get bought. since the store layout is mostly fixed, the items are checked off the list in a predictable order.  
+
 ## Product Requirements & Goals
 * Designed for few Users: Built specifically for <10 users sharing a single, unified shopping list.
 * Single Shopping List: Omits multi-list complexity to keep interaction friction as low as possible.
