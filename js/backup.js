@@ -16,7 +16,7 @@ export function configureBackup(cfg) {
   uid = cfg.uid || uid;
 }
 
-export const FORMAT_VERSION = 2;
+const FORMAT_VERSION = 2;
 
 function sanitizeFilename(name) {
   return String(name)
@@ -67,7 +67,7 @@ function remapListId(id, fromList, toList) {
 // wins and the imported aliases/presets fold into it. Events keep their derived
 // ids (remapped by Item for cross-List imports) and dedupe against existing
 // ids, so restoring the same file twice adds nothing.
-export async function planImport(data) {
+async function planImport(data) {
   const listName = getListName();
   const sameList = data.list === listName;
   const [existingProducts, existingEvents] = await Promise.all([
@@ -161,7 +161,7 @@ export async function planImport(data) {
 }
 
 // Applies a plan returned by planImport. Local writes only.
-export async function applyPlan(plan) {
+async function applyPlan(plan) {
   for (const m of plan.merges) {
     if (m.aliasesToAdd.length || m.presetsToAdd.length) {
       m.product.aliases.push(...m.aliasesToAdd);

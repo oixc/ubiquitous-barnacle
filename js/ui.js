@@ -191,32 +191,24 @@ function setActiveNav(view) {
 }
 
 // --- Slide-out menu ---
-function openMenu() {
-  const drawer = document.getElementById("drawer");
-  if (!drawer) return;
-  drawer.classList.remove("-translate-x-full");
-  drawer.classList.add("translate-x-0");
-  const overlay = document.getElementById("drawer-overlay");
-  overlay.classList.remove("opacity-0", "pointer-events-none");
-  overlay.classList.add("opacity-100", "pointer-events-auto");
-  const menuBtn = document.getElementById("menu-btn");
-  if (menuBtn) menuBtn.setAttribute("aria-expanded", "true");
-}
-
-function closeMenu() {
+function setMenu(open) {
   const drawer = document.getElementById("drawer");
   if (drawer) {
-    drawer.classList.add("-translate-x-full");
-    drawer.classList.remove("translate-x-0");
+    drawer.classList.toggle("-translate-x-full", !open);
+    drawer.classList.toggle("translate-x-0", open);
   }
   const overlay = document.getElementById("drawer-overlay");
   if (overlay) {
-    overlay.classList.add("opacity-0", "pointer-events-none");
-    overlay.classList.remove("opacity-100", "pointer-events-auto");
+    overlay.classList.toggle("opacity-0", !open);
+    overlay.classList.toggle("pointer-events-none", !open);
+    overlay.classList.toggle("opacity-100", open);
+    overlay.classList.toggle("pointer-events-auto", open);
   }
   const menuBtn = document.getElementById("menu-btn");
-  if (menuBtn) menuBtn.setAttribute("aria-expanded", "false");
+  if (menuBtn) menuBtn.setAttribute("aria-expanded", String(open));
 }
+const openMenu = () => setMenu(true);
+const closeMenu = () => setMenu(false);
 
 // --- Sync status ---
 export function setSyncStatus(status) {
@@ -345,81 +337,72 @@ export function renderList({ items, products, listName, tripPositions }) {
 // --- Catalog view ---
 let catalogProducts = [];
 
+// Shared inline-editor: swaps `host` for a text input; Enter/blur commit,
+// Escape cancels. The commit re-renders unless `onSave` handled it.
+function inlineEdit(host, { value = "", placeholder = "", className, onSave }) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = value;
+  input.placeholder = placeholder;
+  input.autocomplete = "off";
+  input.className = className;
+
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    if (save && onSave(input.value.trim())) return;
+    rerender();
+  };
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") finish(true);
+    else if (e.key === "Escape") finish(false);
+  });
+  input.addEventListener("blur", () => finish(true));
+
+  host.textContent = "";
+  host.appendChild(input);
+  input.focus();
+  input.select();
+}
+
 function startRename(productId) {
   const row = document.querySelector(`[data-product-id="${productId}"]`);
   const nameEl = row && row.querySelector("[data-role='product-name']");
   const product = catalogProducts.find((p) => p.id === productId);
   if (!row || !nameEl || !product) return;
 
-  const input = document.createElement("input");
-  input.type = "text";
-  input.value = product.defaultSpelling;
-  input.autocomplete = "off";
-  input.className =
-    "w-full px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600";
-
-  let done = false;
-  const finish = (save) => {
-    if (done) return;
-    done = true;
-    const value = input.value.trim();
-    if (save && value && value !== product.defaultSpelling) {
+  const original = product.defaultSpelling;
+  inlineEdit(nameEl, {
+    value: original,
+    className:
+      "w-full px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600",
+    onSave: (value) => {
+      if (!value || value === original) return false;
       actions.renameProduct(productId, value);
-    } else {
-      rerender();
-    }
-  };
-
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") finish(true);
-    else if (e.key === "Escape") finish(false);
+      return true;
+    },
   });
-  input.addEventListener("blur", () => finish(true));
-
-  nameEl.textContent = "";
-  nameEl.appendChild(input);
-  input.focus();
-  input.select();
 }
 
 function startDetailEdit(itemId) {
   const btn = document.querySelector(
     `[data-action="edit-detail"][data-id="${itemId}"]`,
   );
-  if (!btn) return;
-  const item = listItems.find((i) => i.id === itemId);
-  if (!item) return;
+  const item = btn && listItems.find((i) => i.id === itemId);
+  if (!btn || !item) return;
 
-  const input = document.createElement("input");
-  input.type = "text";
-  input.value = item.detail || "";
-  input.placeholder = "e.g. 500 g";
-  input.autocomplete = "off";
-  input.className =
-    "w-28 px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600";
-
-  let done = false;
-  const finish = (save) => {
-    if (done) return;
-    done = true;
-    const value = input.value.trim();
-    if (save) {
+  inlineEdit(btn, {
+    value: item.detail || "",
+    placeholder: "e.g. 500 g",
+    className:
+      "w-28 px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600",
+    onSave: (value) => {
       actions.updateItemDetail(itemId, value);
-    } else {
-      rerender();
-    }
-  };
-
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") finish(true);
-    else if (e.key === "Escape") finish(false);
+      return true;
+    },
   });
-  input.addEventListener("blur", () => finish(true));
-
-  btn.textContent = "";
-  btn.appendChild(input);
-  input.focus();
-  input.select();
 }
 
 // --- Preset quick-choice chips ---

@@ -42,16 +42,14 @@ function canonicalizeDetail(product, detail) {
   return existing || value;
 }
 
-// Registers a Detail as a Preset if it is new. Returns true when the Product
-// changed so the caller can decide whether to persist it.
+// Registers a Detail as a Preset if it is new.
 function ensurePreset(product, detail) {
   const canonical = canonicalizeDetail(product, detail);
-  if (!canonical) return false;
+  if (!canonical) return;
   const presets = product.presets || (product.presets = []);
-  if (presets.some((p) => p === canonical)) return false;
+  if (presets.some((p) => p === canonical)) return;
   presets.push(canonical);
   if (presets.length > PRESET_CAP) presets.splice(0, presets.length - PRESET_CAP);
-  return true;
 }
 
 function levenshtein(a, b) {
@@ -137,6 +135,24 @@ function nearMatch(products, text) {
   return null;
 }
 
+// Builds a to-buy Item for a Product and optional Detail, canonicalizing the
+// Detail against the Product's Presets and learning new Details as Presets
+// (the Preset rides inside the PUT_ITEM's Product — ADR-0005).
+function buildItem(product, detail) {
+  const listName = getListName();
+  const item = {
+    id: `${listName}::${uid("item_")}`,
+    list: listName,
+    productId: product.id,
+    createdAt: Date.now(),
+  };
+  if (detail) {
+    item.detail = canonicalizeDetail(product, detail);
+    ensurePreset(product, item.detail);
+  }
+  return item;
+}
+
 // Resolves a typed line (Product + optional Detail) into an Item on the List,
 // reading the Catalog and the List once for the whole flow. Exact spelling
 // wins; a near-miss of a known Product becomes an alias only after the typist
@@ -189,38 +205,14 @@ export async function addText(text) {
     return;
   }
 
-  const item = {
-    id: `${listName}::${uid("item_")}`,
-    list: listName,
-    productId: product.id,
-    createdAt: Date.now(),
-  };
-  if (detail) {
-    item.detail = canonicalizeDetail(product, detail);
-    // Learn the Preset; it rides inside the PUT_ITEM's Product instead of a
-    // second Product message (ADR-0005).
-    ensurePreset(product, item.detail);
-  }
-  await apply.putItem(item, product);
+  await apply.putItem(buildItem(product, detail), product);
 }
 
 export async function addItem(product, detail = "") {
   const listName = getListName();
   const items = await db.getAll("items", listName);
   if (items.some((i) => i.productId === product.id)) return;
-
-  const item = {
-    id: `${listName}::${uid("item_")}`,
-    list: listName,
-    productId: product.id,
-    createdAt: Date.now(),
-  };
-  if (detail) {
-    item.detail = canonicalizeDetail(product, detail);
-    // Learn the Preset; it rides inside the PUT_ITEM's Product (ADR-0005).
-    ensurePreset(product, item.detail);
-  }
-  await apply.putItem(item, product);
+  await apply.putItem(buildItem(product, detail), product);
 }
 
 // Sets (or clears) an Item's Detail from the inline editor; canonicalizes
@@ -287,11 +279,8 @@ export async function refreshProductRestock(productId) {
   if (purchases.length === 0) return;
   product.lastPurchase = Math.max(...purchases);
   const interval = medianGap(purchases);
-  if (interval == null) {
-    delete product.restockInterval;
-  } else {
-    product.restockInterval = interval;
-  }
+  if (interval == null) delete product.restockInterval;
+  else product.restockInterval = interval;
   await apply.persistProduct(product);
 }
 
@@ -354,11 +343,6 @@ function segmentEvents(events, gapMs) {
   }
   if (current.length) bursts.push(current);
   return bursts;
-}
-
-// Adding sessions (09): segments of add events for added-together counting.
-function groupAddingSessions(addEvents, gapMs = SESSION_GAP_MS) {
-  return segmentEvents(addEvents, gapMs);
 }
 
 // Counts how many adding sessions each pair of Products co-occurred in. The
@@ -444,7 +428,7 @@ export function computeSuggestions({ products, items, events }) {
   ) {
     const companions = addedTogetherWith(
       latestAdd.productId,
-      groupAddingSessions(adds),
+      segmentEvents(adds),
     );
     for (const c of companions) {
       const product = productById.get(c.productId);

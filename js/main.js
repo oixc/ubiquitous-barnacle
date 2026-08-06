@@ -220,22 +220,23 @@ async function writeDeleteProduct(id, announce = false) {
 }
 
 // --- Local face (used by ui.js and catalog.js) ---
+async function getProduct(productId) {
+  const products = await db.getAll("products", listName);
+  return products.find((p) => p.id === productId) || null;
+}
+
 const actions = {
   getListName: () => listName,
   addItem: (text) => catalog.addText(text),
   matchProduct: catalog.matchProduct,
   addItemWithDetail: async (productId, detail) => {
-    const products = await db.getAll("products", listName);
-    const product = products.find((p) => p.id === productId);
+    const product = await getProduct(productId);
     if (product) await catalog.addItem(product, detail);
   },
   updateItemDetail: async (itemId, detail) => {
-    const [items, products] = await Promise.all([
-      db.getAll("items", listName),
-      db.getAll("products", listName),
-    ]);
+    const items = await db.getAll("items", listName);
     const item = items.find((i) => i.id === itemId);
-    const product = item && products.find((p) => p.id === item.productId);
+    const product = item && (await getProduct(item.productId));
     if (item && product) await catalog.setItemDetail(item, product, detail);
   },
   changeList,
@@ -261,22 +262,19 @@ const actions = {
   removeItem: (id) => writeDelete(id, null, true),
   deleteProduct: (id) => writeDeleteProduct(id, true),
   renameProduct: async (productId, newSpelling) => {
-    const products = await db.getAll("products", listName);
-    const product = products.find((p) => p.id === productId);
+    const product = await getProduct(productId);
     if (!product) return;
     product.defaultSpelling = newSpelling;
     await actions.putProduct(product);
   },
   deletePreset: async (productId, detail) => {
-    const products = await db.getAll("products", listName);
-    const product = products.find((p) => p.id === productId);
+    const product = await getProduct(productId);
     if (!product || !product.presets) return;
     product.presets = product.presets.filter((p) => p !== detail);
     await actions.putProduct(product);
   },
   suggest: async (productId) => {
-    const products = await db.getAll("products", listName);
-    const product = products.find((p) => p.id === productId);
+    const product = await getProduct(productId);
     if (product) await catalog.addItem(product);
   },
 };
@@ -331,5 +329,3 @@ function boot() {
 }
 
 boot();
-
-export { actions };

@@ -14,13 +14,9 @@ export function initDb() {
         if (targetDb.objectStoreNames.contains(name)) {
           targetDb.deleteObjectStore(name);
         }
+        const store = targetDb.createObjectStore(name, { keyPath: "id" });
+        store.createIndex("byList", "list", { unique: false });
       }
-      const items = targetDb.createObjectStore("items", { keyPath: "id" });
-      items.createIndex("byList", "list", { unique: false });
-      const products = targetDb.createObjectStore("products", { keyPath: "id" });
-      products.createIndex("byList", "list", { unique: false });
-      const events = targetDb.createObjectStore("events", { keyPath: "id" });
-      events.createIndex("byList", "list", { unique: false });
     };
 
     req.onsuccess = () => {
@@ -40,20 +36,14 @@ export function getAll(store, listName) {
   });
 }
 
-export function put(store, record) {
+function write(store, op) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, "readwrite");
-    tx.objectStore(store).put(record);
+    op(tx.objectStore(store));
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 }
 
-export function remove(store, id) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, "readwrite");
-    tx.objectStore(store).delete(id);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
+export const put = (store, record) => write(store, (s) => s.put(record));
+export const remove = (store, id) => write(store, (s) => s.delete(id));
