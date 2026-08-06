@@ -428,7 +428,7 @@ export function computeSuggestions({ products, items, events }) {
   ) {
     const companions = addedTogetherWith(
       latestAdd.productId,
-      segmentEvents(adds),
+      segmentEvents(adds, SESSION_GAP_MS),
     );
     for (const c of companions) {
       const product = productById.get(c.productId);
