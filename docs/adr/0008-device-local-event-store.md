@@ -54,8 +54,7 @@ All read one store and filter by `kind`:
 
 - History view: chronological merge of both kinds by `at` (kind badge).
 - Catalog stats: `purchase` → buy count / last-bought; `add` → last-added.
-- Restock intervals: gaps between consecutive `add` events, with `purchase`
-  gaps as fallback for Products without add events.
+- Restock intervals: gaps between consecutive `purchase` events.
 - Added-together: session grouping over `add` events.
 - Backup/restore (format v2): export both kinds; cross-List restore remaps
   `productId` via the Catalog merge and `itemId` by deterministic List-prefix
