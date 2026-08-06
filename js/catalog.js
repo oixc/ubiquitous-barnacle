@@ -371,19 +371,34 @@ function coOccurrenceCounts(sessions) {
   return counts;
 }
 
-// Companion Products of `productId` that co-occurred with it in at least
-// `minSessions` adding sessions, most-often-first (noise guard).
-function addedTogetherWith(
-  productId,
-  sessions,
-  minSessions = MIN_COOCCUR_SESSIONS,
-) {
-  const row = coOccurrenceCounts(sessions).get(productId) || new Map();
-  const companions = [];
-  for (const [other, count] of row) {
-    if (count >= minSessions) companions.push({ productId: other, count });
+// Pivot companions for the whole current adding session: the union of every
+// on-List session Item's added-together companions (noise guard per pair), each
+// companion once. A companion reachable via several session Items reports the
+// rounded average of its per-Item co-occurrence counts and ranks among pivot
+// chips by that average, highest first.
+function sessionPivotCompanions(session, onList, productById, sessions) {
+  const counts = coOccurrenceCounts(sessions);
+  const sessionProductIds = [...new Set(session.map((e) => e.productId))];
+  const byCompanion = new Map();
+  for (const sessionProductId of sessionProductIds) {
+    if (!onList.has(sessionProductId)) continue;
+    const row = counts.get(sessionProductId) || new Map();
+    for (const [companion, count] of row) {
+      if (count < MIN_COOCCUR_SESSIONS || onList.has(companion)) continue;
+      const arr = byCompanion.get(companion) || [];
+      arr.push(count);
+      byCompanion.set(companion, arr);
+    }
   }
-  return companions.sort((a, b) => b.count - a.count);
+  const companions = [];
+  for (const [companion, countsPerSource] of byCompanion) {
+    const product = productById.get(companion);
+    if (!product) continue;
+    const avg =
+      countsPerSource.reduce((a, b) => a + b, 0) / countsPerSource.length;
+    companions.push({ product, count: Math.round(avg), avg });
+  }
+  return companions.sort((a, b) => b.avg - a.avg);
 }
 
 // Latest event satisfying `match` (any when omitted), or null.
@@ -397,11 +412,12 @@ function latestEvent(events, match) {
 }
 
 // Context-aware suggestions (09 + 11). Three regimes, highest priority first:
-//   pivot   — an Item added within the pivot window surfaces its added-together
-//             companions (09); derived from the most recent add event so local
-//             and remote adds both pivot, while an Undo re-add (which records
-//             no event) never does. The triggering Item must still be on the
-//             List — a check-off ends the pivot.
+//   pivot   — the current adding session's on-List Items surface the union of
+//             their added-together companions (09), each once, averaged per
+//             companion; derived from add events so local and remote adds both
+//             pivot, while an Undo re-add (which records no event) never does.
+//             The pivot lives while the latest add is inside the pivot window
+//             and at least one session Item stays on the List.
 //   fresh   — check-offs within the trip window top the strip, newest first (11).
 //   restock — restock-due Products (05) fill the rest and dominate when there
 //             are no fresh check-offs or pivot companions.
@@ -421,19 +437,19 @@ export function computeSuggestions({ products, items, events }) {
 
   const adds = history.filter((e) => e.kind === "add");
   const latestAdd = latestEvent(adds);
-  if (
-    latestAdd &&
-    onList.has(latestAdd.productId) &&
-    now - latestAdd.at <= PIVOT_WINDOW_MS
-  ) {
-    const companions = addedTogetherWith(
-      latestAdd.productId,
-      segmentEvents(adds, SESSION_GAP_MS),
-    );
-    for (const c of companions) {
-      const product = productById.get(c.productId);
-      if (!product || onList.has(c.productId)) continue;
-      ranked.push({ product, kind: "pivot", count: c.count });
+  if (latestAdd && now - latestAdd.at <= PIVOT_WINDOW_MS) {
+    const sessions = segmentEvents(adds, SESSION_GAP_MS);
+    const session = sessions.find((burst) => burst.includes(latestAdd));
+    if (session.some((e) => onList.has(e.productId))) {
+      const companions = sessionPivotCompanions(
+        session,
+        onList,
+        productById,
+        sessions,
+      );
+      for (const c of companions) {
+        ranked.push({ product: c.product, kind: "pivot", count: c.count });
+      }
       expiresAt = latestAdd.at + PIVOT_WINDOW_MS;
     }
   }

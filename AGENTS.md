@@ -73,8 +73,10 @@ build migration mechanisms.
   device-local `events` store derives add/purchase history from the message
   stream with a 10-minute Undo (ADR-0008). Suggestion ranking is soft-priority
   (issues 05, 09, 11): fresh check-offs during a trip (60-minute window) top the
-  strip, restock-due prompts fill in, and an add briefly pivots the strip to its
-  added-together companions (≥3 co-occurring sessions, 30-minute session gap).
+  strip, restock-due prompts fill in, and adds pivot the strip to the current
+  adding session's added-together companions (≥3 co-occurring sessions,
+  30-minute session gap; companions averaged across the session's on-List
+  Items).
   Catalog merge on import is
   decided (spelling-dedupe, existing wins — see ADR-0006), while general
   peer-meeting reconciliation of duplicate Products remains undecided (see

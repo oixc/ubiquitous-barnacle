@@ -100,8 +100,8 @@ _Avoid_: recommendation, buy-again
 
 **Added-together**:
 Two Products that have been added to the List in the same adding session at least
-three times. A just-added Item surfaces its added-together companions as
-suggestions.
+three times. Adding surfaces the union of the current adding session's on-List
+Items' added-together companions as suggestions.
 
 **Peer**:
 An anonymous device participating in a List. No identity beyond the current
