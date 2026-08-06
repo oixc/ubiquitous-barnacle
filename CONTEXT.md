@@ -12,22 +12,30 @@ _Avoid_: Room
 
 **Item**:
 A line on a List: one thing to buy, referencing a Product and displayed using the
-Product's default spelling. Either to-buy or bought. Belongs to exactly one List
-and never moves between Lists.
+Product's default spelling. Always to-buy — buying (checking off) removes it from
+the List. Belongs to exactly one List and never moves between Lists.
 _Avoid_: task, entry
 
-**Bought**:
-The state of an Item someone has purchased. Bought items stay visible (struck
-through) until cleared; they are the shelf of recurring staples.
-_Avoid_: completed, done, checked
+**Check off**:
+Buying an Item: tapping it removes it from the List, records a Purchase, and turns
+its Product into a fresh suggestion. Removing an Item with the trash control is a
+deletion, not a check-off — it records no Purchase.
+_Avoid_: complete, done, tick
 
-**Revive**:
-Re-adding an Item — by any alias of its Product — returns the bought Item to
-to-buy instead of creating a duplicate.
+**Purchase**:
+A single check-off recorded in the Purchase history, identified by its Product,
+the time of the check-off, and the Detail. Removed from history when the Item is
+undone within the Undo window.
 
-**Clearing**:
-Removing all bought Items from the List at once. Cleared items remain in the
-Purchase history.
+**Undo**:
+Re-adding an Item within the Undo window after its check-off — by typing, an
+alias, or a suggestion chip. Undoing cancels the matching Purchase record, so
+accidental check-offs do not pollute statistics.
+_Avoid_: revive, un-check
+
+**Undo window**:
+The short span (10 minutes) after a check-off during which re-adding the same
+Product counts as an Undo rather than a fresh need.
 
 **Catalog**:
 The List's shared vocabulary of Products, belonging to exactly one List and
@@ -63,11 +71,28 @@ spellings consolidate (e.g. "500g" matches "500 g").
 _Avoid_: default (singular — clashes with "Default spelling")
 
 **Purchase history**:
-The record of previously bought Items, kept after clearing, referencing Products
-rather than raw text — so statistics are immune to spelling variation.
+The device-local record of check-offs, derived from the shared message stream:
+every observed check-off (own or a Peer's) lands in each Peer's history,
+deduplicated by Product, time, and Detail. Undoing an Item cancels the matching
+record. Because every Peer derives the same records from the same stream, the
+histories converge without any dedicated sync.
 
 **Restock prompt**:
-A suggestion to re-add a frequently bought Product.
+A suggestion to re-add a Product that is due for restock — its restock interval
+(learned from add-times and Purchase history) has elapsed since the last Purchase.
+Due-based, not raw-frequency-based.
+
+**Suggestion**:
+A one-tap chip in the List's single suggestions strip that adds an Item. The
+strip reorders itself by context — fresh check-offs during a trip, restock
+prompts later, added-together companions while adding — and filters down as the
+user types.
+_Avoid_: recommendation, buy-again
+
+**Added-together**:
+Two Products that have been added to the List in the same adding session at least
+three times. A just-added Item surfaces its added-together companions as
+suggestions.
 
 **Peer**:
 An anonymous device participating in a List. No identity beyond the current

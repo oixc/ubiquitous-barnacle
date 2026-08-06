@@ -2,18 +2,19 @@
 
 A minimal, privacy-focused Progressive Web App designed for less than 10 person shared grocery management. Built as a zero-build static site using standard HTML/JS, Tailwind CSS, IndexedDB, and ntfy.sh for low-data sync.
 
-## Ideal User Experience
-Two core actions:
-1. adding items (plus details) to the shopping list
-2. buying items from the shopping list
-Both actions should be seamless and no-friction in the fastest time with minimal clicks. 
+## North Star Vision: Ideal User Experience
+Two core actions, both seamless and no-friction in the fastest time with minimal clicks/taps:
+1. Adding an Item (plus optional Details) to the List
+2. Buying an Item from the List
 
-For example:
-1. The app suggests the right items to add to minimize mental load of creating a shopping list. 
-    * common items repeat in predictable intervals
-    * some items are typically bought together
-    * details like quantity and brand don't change a lot
-2. The shopping list is ordered in the usual way items get bought. since the store layout is mostly fixed, the items are checked off the list in a predictable order.  
+The List thinks for you, quietly:
+- Buying checks the Item off: it leaves the List and becomes a fresh suggestion — one tap re-adds it. Re-adding within the undo window (minutes) silently cancels that Purchase record, so a mistaken tap or a second of the same Item never pollutes the stats.
+- After the trip, suggestions shift to restock prompts — what the household buys regularly and is due for.
+- Adding an Item surfaces what it is usually added together with, so the List builds itself.
+- While you type, the chips filter down to what matches (and their usual Details) — a few letters and a tap finishes the add.
+- It is one suggestions strip throughout: the app reorders the chips by what you're doing — no modes, no bought shelf, no clearing.
+
+The List only ever shows what's left to buy.
 
 ## Product Requirements & Goals
 * Designed for few Users: Built specifically for <10 users sharing a single, unified shopping list.
@@ -23,9 +24,7 @@ For example:
 * Fast, Low-Data Sync: Real-time background sync using lightweight JSON payloads over Server-Sent Events (SSE), keeping cellular data usage negligible.
 * Zero-Cost Infrastructure: Runs client-side on free static hosts (e.g., GitHub Pages) using free-tier messaging relays.
 * Ad-Free & Private: No ads, third-party trackers, or algorithmic "sponsored suggestions" found in apps like KitchenOwl.
-* Item Frequency & Recommendations: Local history tracking to calculate addition frequencies, helping generate templates and smart restock prompts.
+* Smart Suggestions: Device-local history drives a single context-aware suggestions strip — one-tap undo of recent buys, interval-aware restock prompts, and "added-together" companions — so building the List stays a few taps. No tracking, no sponsored suggestions.
 
 ## Todo
 - Open ideas are tracked as tickets under `.scratch/readme-todos/issues/`.
-- ui: buy again chips should line wrap to allow more chips on screen
-- filter suggestions chips while typing. this allows to type only the first few letters of a product and add it to the shopping list with a quick click. (don't forget to also populate item detail suggestions)  

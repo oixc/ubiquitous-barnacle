@@ -1,5 +1,9 @@
 # 06 — Order the List by typical purchase order
 
+**Deferred:** Superseded by the suggestion-centric vision (ADR-0007); revisit
+after the suggestions work (issues 01, 04, 05, 07-10) lands. Body kept below for
+reference.
+
 **What to build:** The to-buy Items sort in the order the household usually buys them during a shopping trip, so the List reads like a walk through the store and gets checked off in a predictable top-to-bottom order. The app learns each Product's typical position in a trip from Purchase history: segment history into trips (e.g. by time gaps between purchases), derive each Product's typical position, and sort the to-buy section accordingly. Products without enough history fall back to the current recency order, appended after learned ones. The bought section keeps its own grouping.
 
 **Blocked by:** None — can start immediately.

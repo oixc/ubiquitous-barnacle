@@ -2,6 +2,8 @@
 
 **What to build:** Every time an Item is added to the List — typed, revived, added via a suggestion or Preset chip, and added from a remote Peer — the moment is recorded as a per-Product add-time event in a new device-local store (same lifecycle as Purchase history: never synced, so the daily sync budget is untouched). The Catalog view shows each Product's "last added" time so the log is visible and verifiable rather than an invisible data sink. This record is the primary signal for the restock-interval suggestions ticket.
 
+**Feeds:** 05 — restock intervals, 09 — added-together sessions, 11 — soft-priority ranking.
+
 **Blocked by:** None — can start immediately.
 
 **Status:** ready-for-agent
