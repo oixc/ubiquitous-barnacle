@@ -9,5 +9,5 @@ screen.
 
 **Status:** ready-for-agent
 
-- [ ] Chips wrap to multiple lines; no horizontal scrollbar.
-- [ ] Wrapped rows keep a consistent gap and don't overlap.
+- [x] Chips wrap to multiple lines; no horizontal scrollbar.
+- [x] Wrapped rows keep a consistent gap and don't overlap.

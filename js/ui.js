@@ -114,7 +114,7 @@ function renderSuggestions(suggestions) {
   }
   el.innerHTML = `
     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Buy again</div>
-    <div class="flex gap-2 overflow-x-auto pb-1">
+    <div class="flex flex-wrap gap-2">
       ${suggestions
         .map(
           (s) => `
