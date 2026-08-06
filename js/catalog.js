@@ -1,5 +1,5 @@
-// js/catalog.js — Product resolution and Item creation/revive.
-// Pure text-matching helpers plus the resolve/revive flow; writes broadcast
+// js/catalog.js — Product resolution and Item creation.
+// Pure text-matching helpers plus the resolve/add flow; writes broadcast
 // through the injected `apply` actions.
 
 import * as db from "./db.js";
@@ -156,10 +156,10 @@ export async function resolveProduct(text, skipNearMiss = false) {
   return { product, productChanged: true };
 }
 
-export async function addOrReviveItem(product, detail = "", productChanged = false) {
+export async function addItem(product, detail = "", productChanged = false) {
   const listName = getListName();
   const items = await db.getAll("items", listName);
-  const existing = items.find((i) => i.productId === product.id && !i.bought);
+  const existing = items.find((i) => i.productId === product.id);
   if (existing) {
     // No Item message will carry the Product, so product-only changes (e.g. a
     // freshly confirmed Alias) must broadcast on their own.
@@ -167,23 +167,10 @@ export async function addOrReviveItem(product, detail = "", productChanged = fal
     return;
   }
 
-  const bought = items.find((i) => i.productId === product.id && i.bought);
-  if (bought) {
-    bought.bought = false;
-    bought.createdAt = Date.now();
-    if (detail) {
-      bought.detail = canonicalizeDetail(product, detail);
-      if (ensurePreset(product, bought.detail)) await apply.putProduct(product, false);
-    }
-    await apply.putItem(bought, true);
-    return;
-  }
-
   const item = {
     id: `${listName}::${uid("item_")}`,
     list: listName,
     productId: product.id,
-    bought: false,
     createdAt: Date.now(),
   };
   if (detail) {
@@ -222,9 +209,7 @@ export function computeSuggestions({ products, items, history }) {
     }
   }
 
-  const onList = new Set(
-    items.filter((i) => !i.bought).map((i) => i.productId),
-  );
+  const onList = new Set(items.map((i) => i.productId));
   const productById = new Map(products.map((p) => [p.id, p]));
 
   return [...count.entries()]

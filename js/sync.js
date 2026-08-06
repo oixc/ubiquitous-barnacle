@@ -169,8 +169,6 @@ export async function handleRemoteAction(action) {
   } else if (action.type === "DELETE_PRODUCT") {
     if (!action.id.startsWith(listName + "::")) return;
     await apply.deleteProduct(action.id, false);
-  } else if (action.type === "CLEAR_BOUGHT") {
-    await apply.clearBought(false);
   } else if (action.type === "REQUEST_SYNC") {
     if (
       action.ts !== undefined &&

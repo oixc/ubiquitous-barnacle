@@ -71,7 +71,7 @@ async function addItem(text) {
     productText,
     skipNearMiss,
   );
-  if (product) await catalog.addOrReviveItem(product, detail, productChanged);
+  if (product) await catalog.addItem(product, detail, productChanged);
 }
 
 function switchList(newList) {
@@ -113,7 +113,7 @@ const actions = {
   addItemWithDetail: async (productId, detail) => {
     const products = await db.getAll("products", listName);
     const product = products.find((p) => p.id === productId);
-    if (product) await catalog.addOrReviveItem(product, detail);
+    if (product) await catalog.addItem(product, detail);
   },
   updateItemDetail: async (itemId, detail) => {
     const [items, products] = await Promise.all([
@@ -181,9 +181,35 @@ const actions = {
     }
     renderAll();
   },
-  deleteItem: async (id, broadcast = true) => {
+  deleteItem: async (id, broadcast = true, checkOff = false) => {
+    const items = await db.getAll("items", listName);
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    const deletedAt = Date.now();
     await db.remove("items", id);
-    if (broadcast) sync.publishAction({ type: "DELETE_ITEM", id });
+    if (checkOff) {
+      // M1 temp: old-shape purchaseHistory record keeps History/Catalog/suggestions
+      // alive until M2 derives events from the message stream. Deleted in M2.
+      await db.put("purchaseHistory", {
+        id: `${listName}::${uid("hist_")}`,
+        list: listName,
+        productId: item.productId,
+        detail: item.detail || "",
+        boughtAt: deletedAt,
+      });
+    }
+    if (broadcast) {
+      // DELETE_ITEM carries the Item snapshot; deletedAt is present only on
+      // check-offs (buys), absent for plain removals (ADR-0007).
+      const payload = {
+        type: "DELETE_ITEM",
+        id,
+        productId: item.productId,
+        detail: item.detail || "",
+      };
+      if (checkOff) payload.deletedAt = deletedAt;
+      sync.publishAction(payload);
+    }
     renderAll();
   },
   putProduct: async (product, broadcast = true) => {
@@ -223,46 +249,12 @@ const actions = {
     product.presets = product.presets.filter((p) => p !== detail);
     await actions.putProduct(product, true);
   },
-  putHistory: async (record) => {
-    await db.put("purchaseHistory", record);
-    renderAll();
-  },
-  clearBought: async (broadcast = true) => {
-    const items = await db.getAll("items", listName);
-    const boughtIds = items.filter((i) => i.bought).map((i) => i.id);
-    if (boughtIds.length === 0) return;
-    if (
-      broadcast &&
-      !confirm(`Remove ${boughtIds.length} bought item(s) from the list?`)
-    ) {
-      return;
-    }
-    await db.removeMany("items", boughtIds);
-    if (broadcast) sync.publishAction({ type: "CLEAR_BOUGHT" });
-    renderAll();
-  },
-  toggleBought: async (id) => {
-    const items = await db.getAll("items", listName);
-    const item = items.find((i) => i.id === id);
-    if (!item) return;
-    const wasBought = item.bought;
-    item.bought = !wasBought;
-    await actions.putItem(item, true);
-    if (item.bought && !wasBought) {
-      await actions.putHistory({
-        id: `${listName}::${uid("hist_")}`,
-        list: listName,
-        productId: item.productId,
-        detail: item.detail || "",
-        boughtAt: Date.now(),
-      });
-    }
-  },
+  checkOff: (id) => actions.deleteItem(id, true, true),
   removeItem: (id) => actions.deleteItem(id, true),
   suggest: async (productId) => {
     const products = await db.getAll("products", listName);
     const product = products.find((p) => p.id === productId);
-    if (product) await catalog.addOrReviveItem(product);
+    if (product) await catalog.addItem(product);
   },
 };
 

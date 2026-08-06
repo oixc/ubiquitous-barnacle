@@ -254,18 +254,14 @@ export function renderList({ items, products, listName }) {
     const product = productById.get(item.productId);
     const text = product ? product.defaultSpelling : "…";
     const detail = item.detail || "";
-    const rowCls = item.bought
-      ? "flex items-center p-3.5 bg-emerald-950/60 rounded-xl border border-emerald-800/60 shadow-sm transition"
-      : "flex items-center p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition";
     return `
       <li class="flex items-center">
         <button
-          data-action="toggle-bought"
+          data-action="check-off"
           data-id="${item.id}"
-          aria-pressed="${item.bought}"
-          class="${rowCls} flex-1 min-w-0 text-left cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-blue-600"
+          class="flex items-center p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition flex-1 min-w-0 text-left cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-blue-600"
         >
-          <span class="text-sm font-medium ${item.bought ? "line-through text-slate-500" : "text-slate-200"}">
+          <span class="text-sm font-medium text-slate-200">
             ${escapeHtml(text)}
           </span>
         </button>
@@ -274,7 +270,7 @@ export function renderList({ items, products, listName }) {
           data-id="${item.id}"
           aria-label="Edit detail"
           title="Edit detail"
-          class="ml-1 shrink-0 px-2 py-1 rounded-lg border ${item.bought ? "border-emerald-800/60" : "border-slate-800"} text-xs ${detail ? "text-slate-400 hover:text-blue-400" : "text-slate-600 hover:text-blue-400"} transition"
+          class="ml-1 shrink-0 px-2 py-1 rounded-lg border border-slate-800 text-xs ${detail ? "text-slate-400 hover:text-blue-400" : "text-slate-600 hover:text-blue-400"} transition"
         >
           ${detail ? escapeHtml(detail) : icon("pencil", "w-3.5 h-3.5")}
         </button>
@@ -285,35 +281,7 @@ export function renderList({ items, products, listName }) {
     `;
   };
 
-  const sectionHeader = (label, count, extra = "") => `
-    <li class="flex items-center justify-between pt-2 pb-1">
-      <div class="flex items-baseline gap-2">
-        <h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">${label}</h2>
-        <span class="text-xs text-slate-600">${count}</span>
-      </div>
-      ${extra}
-    </li>
-  `;
-
-  const open = items.filter((i) => !i.bought);
-  const bought = items.filter((i) => i.bought);
-
-  const openSection = open.length
-    ? sectionHeader("To buy", open.length) + open.map(itemRow).join("")
-    : "";
-
-  const boughtSection = bought.length
-    ? sectionHeader(
-        "Bought",
-        bought.length,
-        `<button data-action="clear-bought" aria-label="Clear bought items" title="Clear bought items" class="flex items-center gap-1 text-xs font-semibold text-rose-400 hover:text-rose-300 transition">
-          ${icon("trash", "w-3.5 h-3.5")}
-          Clear
-        </button>`,
-      ) + bought.map(itemRow).join("")
-    : "";
-
-  listEl.innerHTML = openSection + boughtSection;
+  listEl.innerHTML = items.map(itemRow).join("");
 }
 
 // --- Catalog view ---
@@ -558,9 +526,8 @@ function bindEvents() {
       const input = document.getElementById("backup-file-input");
       if (input) input.click();
     } else if (action === "toggle-sync") actions.setSyncEnabled(!syncEnabled);
-    else if (action === "clear-bought") actions.clearBought();
     else if (action === "remove-item") actions.removeItem(el.dataset.id);
-    else if (action === "toggle-bought") actions.toggleBought(el.dataset.id);
+    else if (action === "check-off") actions.checkOff(el.dataset.id);
     else if (action === "rename-product") startRename(el.dataset.id);
     else if (action === "delete-product") actions.deleteProduct(el.dataset.id);
     else if (action === "delete-preset")
