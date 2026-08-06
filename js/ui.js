@@ -116,11 +116,16 @@ function suggestionsFilter() {
   });
 }
 
-// Human-readable restock interval, e.g. "daily", "every 3 days",
+// Human-readable restock interval, e.g. "every 3:45" (sub-2-day), "every 3 days",
 // "every 2 weeks", "every 6 months".
 function formatInterval(ms) {
   const days = ms / (24 * 60 * 60 * 1000);
-  if (days < 1.5) return "daily";
+  if (days < 2) {
+    const totalMinutes = Math.round(ms / (60 * 1000));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `every ${hours}:${String(minutes).padStart(2, "0")}`;
+  }
   if (days < 11) return `every ${Math.round(days)} days`;
   const weeks = days / 7;
   if (weeks < 7) return `every ${Math.round(weeks)} weeks`;
