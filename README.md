@@ -27,4 +27,5 @@ For example:
 
 ## Todo
 - Open ideas are tracked as tickets under `.scratch/readme-todos/issues/`.
-- ui: buy again chips should line wrap to allow more chips on screen  
+- ui: buy again chips should line wrap to allow more chips on screen
+- filter suggestions chips while typing. this allows to type only the first few letters of a product and add it to the shopping list with a quick click. (don't forget to also populate item detail suggestions)  
