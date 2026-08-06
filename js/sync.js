@@ -162,7 +162,13 @@ export async function handleRemoteAction(action) {
     await apply.putItem(action.item, false);
   } else if (action.type === "DELETE_ITEM") {
     if (!action.id.startsWith(listName + "::")) return;
-    await apply.deleteItem(action.id, false);
+    // Pass the carried snapshot so the receiving Peer can derive the purchase
+    // event even for an Item it never stored (added + checked off while offline).
+    await apply.deleteItem(action.id, false, {
+      productId: action.productId,
+      detail: action.detail || "",
+      deletedAt: action.deletedAt,
+    });
   } else if (action.type === "PUT_PRODUCT") {
     if (action.product.list !== listName) return;
     await apply.putProduct(action.product, false);

@@ -1,16 +1,16 @@
 // js/db.js — IndexedDB storage layer.
-// Stores: items, products, purchaseHistory (each indexed byList).
+// Stores: items, products, events (each indexed byList).
 
 let db = null;
 
 export function initDb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open("GroceryDB", 4);
+    const req = indexedDB.open("GroceryDB", 5);
 
     req.onupgradeneeded = (e) => {
       const targetDb = e.target.result;
       // Nobody has real data yet; drop and rebuild the schema each version.
-      for (const name of ["items", "products", "purchaseHistory"]) {
+      for (const name of ["items", "products", "events"]) {
         if (targetDb.objectStoreNames.contains(name)) {
           targetDb.deleteObjectStore(name);
         }
@@ -19,10 +19,8 @@ export function initDb() {
       items.createIndex("byList", "list", { unique: false });
       const products = targetDb.createObjectStore("products", { keyPath: "id" });
       products.createIndex("byList", "list", { unique: false });
-      const history = targetDb.createObjectStore("purchaseHistory", {
-        keyPath: "id",
-      });
-      history.createIndex("byList", "list", { unique: false });
+      const events = targetDb.createObjectStore("events", { keyPath: "id" });
+      events.createIndex("byList", "list", { unique: false });
     };
 
     req.onsuccess = () => {

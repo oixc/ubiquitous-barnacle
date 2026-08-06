@@ -15,10 +15,10 @@ added-together, and soft-priority work consume these events (feeds below).
 
 **Status:** ready-for-agent
 
-- [ ] Catalog view shows each Product's last-added time alongside the existing buy count / last-bought.
-- [ ] History view renders add and purchase events together, sorted chronologically, each with a kind badge ("Added" / "Bought").
-- [ ] Backup export (format v2) includes both event kinds; restore remaps `productId` and `itemId` and dedupes by event key.
-- [ ] Existing stats consumers (suggestions, catalog counts) read the `events` store filtered by kind; behaviour unchanged.
+- [x] Catalog view shows each Product's last-added time alongside the existing buy count / last-bought.
+- [x] History view renders add and purchase events together, sorted chronologically, each with a kind badge ("Added" / "Bought").
+- [x] Backup export (format v2) includes both event kinds; restore remaps `productId` and `itemId` by deterministic List-prefix swap (idempotent re-import) and dedupes by event key.
+- [x] Existing stats consumers (suggestions, catalog counts) read the `events` store filtered by kind; behaviour unchanged.
 
 **Note:** "last added" shows the last independent add — an undo re-add records no
 add event, so it does not move the timestamp.

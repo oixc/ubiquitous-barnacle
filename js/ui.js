@@ -434,11 +434,19 @@ function renderCatalog(products, history) {
 
   const count = new Map();
   const lastBought = new Map();
+  const lastAdded = new Map();
   for (const h of history) {
-    count.set(h.productId, (count.get(h.productId) || 0) + 1);
-    const prev = lastBought.get(h.productId);
-    if (prev === undefined || h.boughtAt > prev) {
-      lastBought.set(h.productId, h.boughtAt);
+    if (h.kind === "purchase") {
+      count.set(h.productId, (count.get(h.productId) || 0) + 1);
+      const prev = lastBought.get(h.productId);
+      if (prev === undefined || h.at > prev) {
+        lastBought.set(h.productId, h.at);
+      }
+    } else if (h.kind === "add") {
+      const prev = lastAdded.get(h.productId);
+      if (prev === undefined || h.at > prev) {
+        lastAdded.set(h.productId, h.at);
+      }
     }
   }
 
@@ -451,6 +459,7 @@ function renderCatalog(products, history) {
     .map((p) => {
       const times = count.get(p.id) || 0;
       const last = lastBought.get(p.id);
+      const added = lastAdded.get(p.id);
       return `
       <div class="flex items-center justify-between p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition" data-product-id="${p.id}">
         <div class="min-w-0">
@@ -465,7 +474,8 @@ function renderCatalog(products, history) {
         <div class="flex items-center gap-3 shrink-0 ml-3">
           <div class="text-right">
             <div class="text-sm text-slate-300">${times}×</div>
-            <div class="text-[10px] text-slate-500">${last ? `last ${new Date(last).toLocaleDateString()}` : "never"}</div>
+            <div class="text-[10px] text-slate-500">${last ? `last bought ${new Date(last).toLocaleDateString()}` : "never bought"}</div>
+            <div class="text-[10px] text-slate-500">${added ? `last added ${new Date(added).toLocaleDateString()}` : "never added"}</div>
           </div>
           <button data-action="rename-product" data-id="${p.id}" aria-label="Rename product" title="Rename" class="text-slate-500 hover:text-slate-200 p-1 rounded-lg transition">
             ${icon("pencil", "w-4 h-4")}
@@ -480,27 +490,35 @@ function renderCatalog(products, history) {
     .join("");
 }
 
-// --- Purchase history view (device-local) ---
+// --- Event history view (device-local add + purchase events) ---
 function renderHistory(history, products) {
   const el = document.getElementById("view-history");
   if (!el) return;
 
   if (history.length === 0) {
-    el.innerHTML = `<p class="text-center py-8 text-slate-500 text-sm">No purchase history yet.</p>`;
+    el.innerHTML = `<p class="text-center py-8 text-slate-500 text-sm">No event history yet.</p>`;
     return;
   }
 
   const productById = new Map(products.map((p) => [p.id, p]));
-  const sorted = [...history].sort((a, b) => b.boughtAt - a.boughtAt);
+  const sorted = [...history].sort((a, b) => b.at - a.at);
 
   el.innerHTML = sorted
     .map((h) => {
       const product = productById.get(h.productId);
       const name = product ? product.defaultSpelling : "…";
+      const isAdd = h.kind === "add";
+      const badge = isAdd ? "Added" : "Bought";
+      const badgeCls = isAdd
+        ? "bg-blue-950/60 text-blue-300"
+        : "bg-emerald-950/60 text-emerald-300";
       return `
       <div class="flex items-center justify-between p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition">
-        <span class="text-sm font-medium text-slate-200">${escapeHtml(name)}${h.detail ? ` <span class="text-xs text-slate-400">· ${escapeHtml(h.detail)}</span>` : ""}</span>
-        <span class="text-xs text-slate-500 shrink-0 ml-3">${escapeHtml(new Date(h.boughtAt).toLocaleString())}</span>
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${badgeCls}">${badge}</span>
+          <span class="text-sm font-medium text-slate-200 truncate">${escapeHtml(name)}${h.detail ? ` <span class="text-xs text-slate-400">· ${escapeHtml(h.detail)}</span>` : ""}</span>
+        </div>
+        <span class="text-xs text-slate-500 shrink-0 ml-3">${escapeHtml(new Date(h.at).toLocaleString())}</span>
       </div>
     `;
     })

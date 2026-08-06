@@ -194,6 +194,7 @@ export async function setItemDetail(item, product, detail) {
 const SUGGEST_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 const MIN_PURCHASES = 2;
 const MAX_SUGGESTIONS = 5;
+const UNDO_WINDOW_MS = 10 * 60 * 1000;
 
 export function computeSuggestions({ products, items, history }) {
   const windowStart = Date.now() - SUGGEST_WINDOW_MS;
@@ -201,11 +202,12 @@ export function computeSuggestions({ products, items, history }) {
   const count = new Map();
   const lastBought = new Map();
   for (const h of history) {
-    if (h.boughtAt < windowStart) continue;
+    if (h.kind !== "purchase") continue;
+    if (h.at < windowStart) continue;
     count.set(h.productId, (count.get(h.productId) || 0) + 1);
     const prev = lastBought.get(h.productId);
-    if (prev === undefined || h.boughtAt > prev) {
-      lastBought.set(h.productId, h.boughtAt);
+    if (prev === undefined || h.at > prev) {
+      lastBought.set(h.productId, h.at);
     }
   }
 
@@ -226,4 +228,26 @@ export function computeSuggestions({ products, items, history }) {
       (a, b) => b.count - a.count || b.lastBought - a.lastBought,
     )
     .slice(0, MAX_SUGGESTIONS);
+}
+
+// Undo classification (ADR-0008): re-adding a Product whose most recent purchase
+// event lies inside the 10-minute Undo window cancels that purchase event. The
+// paired add event (matched by the purchase's Item) is kept — "last added" shows
+// the last independent add, and an undo re-add records no event itself, so the
+// timestamp never moves and an on-list Product never reads "never added".
+// Runs in the item-add write path, so local and remote re-adds both cancel; a
+// genuine double-buy undercounts by one by design. Returns true when an Undo
+// happened, so the caller can skip recording a fresh add event for the re-added
+// Item.
+export async function cancelUndoIfFresh(productId) {
+  const listName = getListName();
+  const events = await db.getAll("events", listName);
+  let latest = null;
+  for (const e of events) {
+    if (e.kind !== "purchase" || e.productId !== productId) continue;
+    if (!latest || e.at > latest.at) latest = e;
+  }
+  if (!latest || Date.now() - latest.at > UNDO_WINDOW_MS) return false;
+  await db.remove("events", latest.id);
+  return true;
 }

@@ -10,17 +10,13 @@ import * as ui from "./ui.js";
 
 // --- Dev / Sync Toggle ---
 const ENABLE_SYNC = false; // Shipped default; the in-app toggle overrides per device
+const ENABLE_UNDO = false; // Dev flag: set false to test without Undo (re-adds always record add events)
 
 // --- List & Peer Setup ---
 const PEER_ID = "usr_" + Math.random().toString(36).substring(2, 9);
 
 function uid(prefix) {
-  return (
-    prefix +
-    Date.now() +
-    "_" +
-    Math.random().toString(36).substring(2, 6)
-  );
+  return prefix + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
 }
 
 function getListFromUrl() {
@@ -48,7 +44,7 @@ async function renderAll() {
   const [items, products, history] = await Promise.all([
     db.getAll("items", listName),
     db.getAll("products", listName),
-    db.getAll("purchaseHistory", listName),
+    db.getAll("events", listName),
   ]);
   const suggestions = catalog.computeSuggestions({ products, items, history });
   ui.renderAll({
@@ -143,7 +139,7 @@ const actions = {
       data.version !== backup.FORMAT_VERSION ||
       typeof data.list !== "string" ||
       !Array.isArray(data.products) ||
-      !Array.isArray(data.history)
+      !Array.isArray(data.events)
     ) {
       alert("That file isn't a valid backup.");
       return;
@@ -158,7 +154,7 @@ const actions = {
     msg +=
       `Catalog: ${s.productsToAdd} to add, ${s.productsMerged} already present ` +
       `(${s.aliasesToAdd} aliases, ${s.presetsToAdd} presets to fold in).\n` +
-      `History: ${s.historyToAdd} to add, ${s.historySkipped} duplicates skipped.\n\n` +
+      `Events: ${s.eventsToAdd} to add, ${s.eventsSkipped} duplicates skipped.\n\n` +
       "Restoring is local — nothing is synced to other devices.";
     if (!confirm(msg)) return;
     await backup.applyPlan(plan);
@@ -171,7 +167,29 @@ const actions = {
   },
 
   putItem: async (item, broadcast = true) => {
+    const items = await db.getAll("items", listName);
+    const isNew = !items.some((i) => i.id === item.id);
     await db.put("items", item);
+    if (isNew) {
+      // Add-event derivation (ADR-0008): a PUT_ITEM for an Item new to this
+      // device records an add event from the Item's createdAt. A re-add inside
+      // the Undo window cancels the previous purchase instead and records
+      // nothing itself (the paired add survives as the last independent add).
+      // Derived ids keep the 12h SSE replay / FULL_SYNC re-puts idempotent.
+      const undone =
+        ENABLE_UNDO && (await catalog.cancelUndoIfFresh(item.productId));
+      if (!undone) {
+        await db.put("events", {
+          id: `${listName}::add::${item.id}`,
+          list: listName,
+          kind: "add",
+          itemId: item.id,
+          productId: item.productId,
+          detail: item.detail || "",
+          at: item.createdAt,
+        });
+      }
+    }
     if (broadcast) {
       // Coupled transport: always attach the Item's Product so Peers can render
       // the Item (and its aliases/presets) without a separate Product message.
@@ -181,21 +199,29 @@ const actions = {
     }
     renderAll();
   },
-  deleteItem: async (id, broadcast = true, checkOff = false) => {
+  deleteItem: async (id, broadcast = true, snapshot = null) => {
+    // snapshot: { productId, detail, deletedAt } — the Item data carried by a
+    // wire DELETE_ITEM, so a Peer can record the purchase event even for an
+    // Item it never stored. deletedAt present only on check-offs.
     const items = await db.getAll("items", listName);
     const item = items.find((i) => i.id === id);
-    if (!item) return;
-    const deletedAt = Date.now();
+    const productId =
+      (snapshot && snapshot.productId) || (item && item.productId);
+    const detail = (snapshot && snapshot.detail) || (item && item.detail) || "";
+    if (!item && !(snapshot && snapshot.productId)) return;
+    const deletedAt = snapshot && snapshot.deletedAt;
     await db.remove("items", id);
-    if (checkOff) {
-      // M1 temp: old-shape purchaseHistory record keeps History/Catalog/suggestions
-      // alive until M2 derives events from the message stream. Deleted in M2.
-      await db.put("purchaseHistory", {
-        id: `${listName}::${uid("hist_")}`,
+    if (deletedAt != null) {
+      // Purchase-event derivation (ADR-0008): a check-off DELETE_ITEM records a
+      // purchase event from deletedAt. Plain removals record nothing.
+      await db.put("events", {
+        id: `${listName}::purchase::${id}`,
         list: listName,
-        productId: item.productId,
-        detail: item.detail || "",
-        boughtAt: deletedAt,
+        kind: "purchase",
+        itemId: id,
+        productId,
+        detail,
+        at: deletedAt,
       });
     }
     if (broadcast) {
@@ -204,10 +230,10 @@ const actions = {
       const payload = {
         type: "DELETE_ITEM",
         id,
-        productId: item.productId,
-        detail: item.detail || "",
+        productId,
+        detail,
       };
-      if (checkOff) payload.deletedAt = deletedAt;
+      if (deletedAt != null) payload.deletedAt = deletedAt;
       sync.publishAction(payload);
     }
     renderAll();
@@ -221,7 +247,9 @@ const actions = {
     if (broadcast) {
       const items = await db.getAll("items", listName);
       if (items.some((i) => i.productId === id)) {
-        alert("This product is still on the list. Remove it from the list first.");
+        alert(
+          "This product is still on the list. Remove it from the list first.",
+        );
         return;
       }
       const products = await db.getAll("products", listName);
@@ -249,7 +277,7 @@ const actions = {
     product.presets = product.presets.filter((p) => p !== detail);
     await actions.putProduct(product, true);
   },
-  checkOff: (id) => actions.deleteItem(id, true, true),
+  checkOff: (id) => actions.deleteItem(id, true, { deletedAt: Date.now() }),
   removeItem: (id) => actions.deleteItem(id, true),
   suggest: async (productId) => {
     const products = await db.getAll("products", listName);
@@ -302,4 +330,3 @@ function boot() {
 boot();
 
 export { actions };
-

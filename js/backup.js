@@ -1,7 +1,8 @@
 // js/backup.js — Backup (export) and restore (import) of a List's Catalog and
-// Purchase history, as a single versioned JSON file. Local-only: an import
-// writes to this device's IndexedDB and never broadcasts to Peers, so the
-// shared Catalog stays authoritative and the ntfy sync budget is untouched.
+// event history (add + purchase events), as a single versioned JSON file.
+// Local-only: an import writes to this device's IndexedDB and never broadcasts
+// to Peers, so the shared Catalog stays authoritative and the ntfy sync budget
+// is untouched. Format v2 (see docs/adr/0008): history is one `events` array.
 // See docs/adr/0006-backup-export-import.md.
 
 import * as db from "./db.js";
@@ -15,7 +16,7 @@ export function configureBackup(cfg) {
   uid = cfg.uid || uid;
 }
 
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2;
 
 function sanitizeFilename(name) {
   return String(name)
@@ -26,16 +27,16 @@ function sanitizeFilename(name) {
 // --- Export ---
 export async function buildExport() {
   const listName = getListName();
-  const [products, history] = await Promise.all([
+  const [products, events] = await Promise.all([
     db.getAll("products", listName),
-    db.getAll("purchaseHistory", listName),
+    db.getAll("events", listName),
   ]);
   return {
     version: FORMAT_VERSION,
     exportedAt: Date.now(),
     list: listName,
     products,
-    history,
+    events,
   };
 }
 
@@ -53,21 +54,25 @@ export function downloadBackup(data) {
   URL.revokeObjectURL(url);
 }
 
-// --- Import plan ---
-function historyKey(productId, boughtAt, detail) {
-  return `${productId}\u0000${boughtAt}\u0000${detail || ""}`;
+// Deterministic cross-List id remap: `<src>::<rest>` becomes `<dst>::<rest>`
+// (a List-prefix swap, never a fresh uid). Event ids are derived from their
+// Item id, so a re-import of the same backup collides and simply overwrites.
+function remapListId(id, fromList, toList) {
+  const prefix = fromList + "::";
+  return id.startsWith(prefix) ? toList + "::" + id.slice(prefix.length) : id;
 }
 
 // Plans the merge without writing anything. Imported Products dedupe against
 // existing local Products by normalized default spelling — the existing one
-// wins and the imported aliases/presets fold into it. Everything else is
-// added, with IDs remapped to this List when the backup came from another.
+// wins and the imported aliases/presets fold into it. Events keep their derived
+// ids (remapped by Item for cross-List imports) and dedupe against existing
+// ids, so restoring the same file twice adds nothing.
 export async function planImport(data) {
   const listName = getListName();
   const sameList = data.list === listName;
-  const [existingProducts, existingHistory] = await Promise.all([
+  const [existingProducts, existingEvents] = await Promise.all([
     db.getAll("products", listName),
-    db.getAll("purchaseHistory", listName),
+    db.getAll("events", listName),
   ]);
 
   const existingBySpelling = new Map(
@@ -116,20 +121,21 @@ export async function planImport(data) {
     seenSpelling.set(norm, product.id);
   }
 
-  const historyKeys = new Set(
-    existingHistory.map((h) => historyKey(h.productId, h.boughtAt, h.detail)),
-  );
-  const historyToAdd = [];
-  for (const h of data.history) {
-    const productId = productIdMap.get(h.productId) || h.productId;
-    const key = historyKey(productId, h.boughtAt, h.detail);
-    if (historyKeys.has(key)) continue;
-    historyKeys.add(key);
-    historyToAdd.push({
-      ...h,
+  const existingEventIds = new Set(existingEvents.map((e) => e.id));
+  const eventsToAdd = [];
+  for (const ev of data.events) {
+    const itemId = sameList
+      ? ev.itemId
+      : remapListId(ev.itemId, data.list, listName);
+    const id = `${listName}::${ev.kind}::${itemId}`;
+    if (existingEventIds.has(id)) continue;
+    existingEventIds.add(id);
+    eventsToAdd.push({
+      ...ev,
       list: listName,
-      id: sameList ? h.id : `${listName}::${uid("hist_")}`,
-      productId,
+      id,
+      itemId,
+      productId: productIdMap.get(ev.productId) || ev.productId,
     });
   }
 
@@ -145,12 +151,12 @@ export async function planImport(data) {
       productsMerged: merges.length,
       aliasesToAdd,
       presetsToAdd,
-      historyToAdd: historyToAdd.length,
-      historySkipped: data.history.length - historyToAdd.length,
+      eventsToAdd: eventsToAdd.length,
+      eventsSkipped: data.events.length - eventsToAdd.length,
     },
     productsToAdd,
     merges,
-    historyToAdd,
+    eventsToAdd,
   };
 }
 
@@ -166,7 +172,7 @@ export async function applyPlan(plan) {
   for (const p of plan.productsToAdd) {
     await db.put("products", p);
   }
-  for (const h of plan.historyToAdd) {
-    await db.put("purchaseHistory", h);
+  for (const e of plan.eventsToAdd) {
+    await db.put("events", e);
   }
 }

@@ -40,11 +40,13 @@ Neither kind is ever broadcast; the daily sync budget is untouched.
 
 The re-add (`PUT_ITEM` for a Product whose most recent purchase is inside the
 10-minute Undo window) is the **trigger**, not a fresh add-time event. Matching
-is by Product to find that purchase; the paired add is then cancelled via the
-purchase's `itemId`. Netting the add → check-off → undo sequence removes both
-records, so mistaken taps never pollute restock intervals, added-together
-sessions, or "last added". The re-added Item (a fresh Item id) carries no event
-until it is itself checked off.
+is by Product to find that purchase; the purchase is then cancelled and its
+paired add event (matched by the purchase's `itemId`) is **kept** — "last added"
+shows the last independent add, and an undo re-add records no event itself, so
+the timestamp never moves and an on-list Product never reads "never added".
+Mistaken check-offs therefore never pollute restock intervals or buy counts,
+while "last added" stays truthful. The re-added Item (a fresh Item id) carries
+no event until it is itself checked off.
 
 ## Consumers
 
@@ -55,8 +57,10 @@ All read one store and filter by `kind`:
 - Restock intervals: gaps between consecutive `add` events, with `purchase`
   gaps as fallback for Products without add events.
 - Added-together: session grouping over `add` events.
-- Backup/restore: export both kinds; cross-List restore remaps `productId` and
-  `itemId`; dedupe by event key.
+- Backup/restore (format v2): export both kinds; cross-List restore remaps
+  `productId` via the Catalog merge and `itemId` by deterministic List-prefix
+  swap (`src::item_x` → `dst::item_x`), so re-importing the same file is
+  idempotent — the derived event id is the dedup key.
 
 ## Considered options
 

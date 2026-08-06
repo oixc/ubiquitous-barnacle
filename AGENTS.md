@@ -20,10 +20,13 @@ build migration mechanisms.
 - There are no tests, linters, or typechecks. Verify changes manually in the browser.
 
 ## Gotchas
-- Sync is on by default (`ENABLE_SYNC` near the top of `js/main.js`, `true`),
+- Sync is off by default (`ENABLE_SYNC` near the top of `js/main.js`, `false`),
   and users can flip it per device via the drawer toggle (persisted in
   `pwa_grocery_sync`). While off, no ntfy.sh network calls happen — the app runs
   local-only. The drawer also shows a per-device "messages sent today" counter.
+- Undo is off by default (`ENABLE_UNDO` near the top of `js/main.js`, `false`).
+  Set it to `false` to test the event store without Undo classification — every
+  re-add then records a plain add event.
 - Service worker is cache-first with hardcoded `CACHE_NAME = "grocery-v18"` in `sw.js`.
   Bump the version AND add any new `js/*.js` file to `ASSETS` when shipping changes,
   or installed clients keep stale assets. ntfy.sh requests deliberately bypass the
@@ -55,19 +58,21 @@ build migration mechanisms.
   the automatic fresh-join catch-up pull, so hit the drawer's Refresh afterwards
   to still fetch live Items/Products from Peers.
 - IndexedDB is `GroceryDB` (version bumps freely in early development, currently
-  v4): `items`, `products`, and `events` stores, each with a `byList` index —
+  v5): `items`, `products`, and `events` stores, each with a `byList` index —
   `events` (ADR-0008) is the device-local add/purchase history replacing the old
-  `purchaseHistory` store. Item/Product IDs are prefixed with the List name
+  `purchaseHistory` store. Item/Product/event IDs are prefixed with the List name
   (`${listName}::…`) so one DB can hold several Lists without cross-talk; on List
   switch, reads are scoped by `listName` and nothing carries over.
 - Tailwind comes from the CDN (`cdn.tailwindcss.com`), not a build pipeline.
   The app is dark-mode only (slate-950 base); there is no theme switcher and no
   `dark:` variant usage. Don't reintroduce a light theme or a toggle.
 - Domain vocabulary lives in `CONTEXT.md`, architectural decisions in `docs/adr/`.
-  Use that language in code and discussions. Note: Clearing and the bought shelf
-  are being replaced by check-off + undo (ADR-0007), and the Purchase-history
-  record is being replaced by the device-local event store (ADR-0008); the
-  current `js/` code still implements the old model. Catalog merge on import is
+  Use that language in code and discussions. The bought shelf and Clearing are
+  gone: checking off removes the Item and records a Purchase (ADR-0007), and the
+  device-local `events` store derives add/purchase history from the message
+  stream with a 10-minute Undo (ADR-0008). Suggestions are still count-based;
+  soft-priority ranking (trip window, restock-due, added-together) is pending
+  (issues 05, 09, 11). Catalog merge on import is
   decided (spelling-dedupe, existing wins — see ADR-0006), while general
   peer-meeting reconciliation of duplicate Products remains undecided (see
   ADR-0003).
