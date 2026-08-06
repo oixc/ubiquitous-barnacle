@@ -46,7 +46,7 @@ async function renderAll() {
     db.getAll("products", listName),
     db.getAll("events", listName),
   ]);
-  const suggestions = catalog.computeSuggestions({ products, items, history });
+  const suggestions = catalog.computeSuggestions({ products, items });
   ui.renderAll({
     items,
     products,
@@ -223,6 +223,10 @@ const actions = {
         detail,
         at: deletedAt,
       });
+      // Restock stats live on the Product (ticket 05): refreshed only when a
+      // purchase is recorded, so no per-render recompute. Local-only write —
+      // the updated stats ride on the next Item broadcast like other edits.
+      await catalog.refreshProductRestock(productId);
     }
     if (broadcast) {
       // DELETE_ITEM carries the Item snapshot; deletedAt is present only on

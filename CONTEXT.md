@@ -88,8 +88,8 @@ _Avoid_: Purchase history (singular)
 
 **Restock prompt**:
 A suggestion to re-add a Product that is due for restock — its restock interval
-(learned from add events and purchase events) has elapsed since the last
-Purchase. Due-based, not raw-frequency-based.
+(learned from purchase events) has elapsed since the last Purchase. Due-based,
+not raw-frequency-based.
 
 **Suggestion**:
 A one-tap chip in the List's single suggestions strip that adds an Item. The

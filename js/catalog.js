@@ -1,6 +1,7 @@
-// js/catalog.js — Product resolution and Item creation.
-// Pure text-matching helpers plus the resolve/add flow; writes broadcast
-// through the injected `apply` actions.
+// js/catalog.js — Product resolution, Item creation, and suggestion logic.
+// Text-matching helpers, the resolve/add flow, restock prompts (ADR-0008), and
+// undo classification. Reads IndexedDB directly; Product writes go through the
+// injected `apply` actions.
 
 import * as db from "./db.js";
 
@@ -190,42 +191,71 @@ export async function setItemDetail(item, product, detail) {
   await apply.putItem(item, true);
 }
 
-// --- Purchase suggestions (Restock prompts) ---
-const SUGGEST_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
-const MIN_PURCHASES = 2;
-const MAX_SUGGESTIONS = 5;
+// --- Restock prompts (ADR-0008: interval from purchase gaps) ---
+const MAX_SUGGESTIONS = 20;
 const UNDO_WINDOW_MS = 10 * 60 * 1000;
 
-export function computeSuggestions({ products, items, history }) {
-  const windowStart = Date.now() - SUGGEST_WINDOW_MS;
-
-  const count = new Map();
-  const lastBought = new Map();
-  for (const h of history) {
-    if (h.kind !== "purchase") continue;
-    if (h.at < windowStart) continue;
-    count.set(h.productId, (count.get(h.productId) || 0) + 1);
-    const prev = lastBought.get(h.productId);
-    if (prev === undefined || h.at > prev) {
-      lastBought.set(h.productId, h.at);
-    }
+// Median of the gaps between consecutive ascending timestamps; null when fewer
+// than two timestamps give no gap at all.
+export function medianGap(times) {
+  const sorted = [...times].sort((a, b) => a - b);
+  if (sorted.length < 2) return null;
+  const gaps = [];
+  for (let i = 1; i < sorted.length; i++) {
+    gaps.push(sorted[i] - sorted[i - 1]);
   }
+  gaps.sort((a, b) => a - b);
+  return gaps[Math.floor(gaps.length / 2)];
+}
 
+// Recomputes a Product's restock stats from its purchase events and persists
+// them on the Product (locally, no broadcast — the change rides on the next
+// Item broadcast like other Product edits). Strictly purchase-driven: called
+// only when a purchase is recorded, never per render.
+export async function refreshProductRestock(productId) {
+  const listName = getListName();
+  const [events, products] = await Promise.all([
+    db.getAll("events", listName),
+    db.getAll("products", listName),
+  ]);
+  const product = products.find((p) => p.id === productId);
+  if (!product) return;
+  const purchases = events
+    .filter((e) => e.kind === "purchase" && e.productId === productId)
+    .map((e) => e.at);
+  if (purchases.length === 0) return;
+  product.lastPurchase = Math.max(...purchases);
+  const interval = medianGap(purchases);
+  if (interval == null) {
+    delete product.restockInterval;
+  } else {
+    product.restockInterval = interval;
+  }
+  await apply.putProduct(product, false);
+}
+
+// Restock-due suggestions: reads the stats stored on each Product (no history
+// recompute). A Product is due when its restock interval has elapsed since its
+// last purchase; frequent-but-not-yet-due Products are suppressed. Ranking is
+// by due date (most overdue first), ties by shorter interval.
+export function computeSuggestions({ products, items }) {
   const onList = new Set(items.map((i) => i.productId));
-  const productById = new Map(products.map((p) => [p.id, p]));
+  const now = Date.now();
 
-  return [...count.entries()]
-    .filter(([productId, times]) => {
-      const product = productById.get(productId);
-      return product && times >= MIN_PURCHASES && !onList.has(productId);
+  return products
+    .filter((p) => {
+      if (onList.has(p.id)) return false;
+      if (!p.restockInterval || p.lastPurchase == null) return false;
+      return now - p.lastPurchase >= p.restockInterval;
     })
-    .map(([productId, times]) => ({
-      product: productById.get(productId),
-      count: times,
-      lastBought: lastBought.get(productId),
+    .map((p) => ({
+      product: p,
+      interval: p.restockInterval,
+      dueAt: p.lastPurchase + p.restockInterval,
     }))
     .sort(
-      (a, b) => b.count - a.count || b.lastBought - a.lastBought,
+      (a, b) =>
+        a.dueAt - b.dueAt || a.interval - b.interval,
     )
     .slice(0, MAX_SUGGESTIONS);
 }

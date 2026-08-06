@@ -116,6 +116,18 @@ function suggestionsFilter() {
   });
 }
 
+// Human-readable restock interval, e.g. "daily", "every 3 days",
+// "every 2 weeks", "every 6 months".
+function formatInterval(ms) {
+  const days = ms / (24 * 60 * 60 * 1000);
+  if (days < 1.5) return "daily";
+  if (days < 11) return `every ${Math.round(days)} days`;
+  const weeks = days / 7;
+  if (weeks < 7) return `every ${Math.round(weeks)} weeks`;
+  const months = days / 30;
+  return `every ${Math.round(months)} months`;
+}
+
 function renderSuggestionStrip() {
   const el = document.getElementById("suggestions");
   if (!el) return;
@@ -130,7 +142,7 @@ function renderSuggestionStrip() {
       ${visible
         .map(
           (s) => `
-        <button data-action="add-suggested" data-id="${s.product.id}" title="Bought ${s.count}×" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/40 text-xs text-amber-200 hover:bg-amber-900/40 transition active:scale-95 motion-reduce:transition-none motion-reduce:transform-none">
+        <button data-action="add-suggested" data-id="${s.product.id}" title="Restock every ${formatInterval(s.interval)} · due ${new Date(s.dueAt).toLocaleDateString()}" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/40 text-xs text-amber-200 hover:bg-amber-900/40 transition active:scale-95 motion-reduce:transition-none motion-reduce:transform-none">
           ${escapeHtml(s.product.defaultSpelling)}
           ${icon("plus", "w-3.5 h-3.5 text-amber-300")}
         </button>`,
@@ -476,6 +488,7 @@ function renderCatalog(products, history) {
             <div class="text-sm text-slate-300">${times}×</div>
             <div class="text-[10px] text-slate-500">${last ? `last bought ${new Date(last).toLocaleDateString()}` : "never bought"}</div>
             <div class="text-[10px] text-slate-500">${added ? `last added ${new Date(added).toLocaleDateString()}` : "never added"}</div>
+            <div class="text-[10px] text-slate-500">${p.restockInterval ? `restock ${formatInterval(p.restockInterval)}` : ""}</div>
           </div>
           <button data-action="rename-product" data-id="${p.id}" aria-label="Rename product" title="Rename" class="text-slate-500 hover:text-slate-200 p-1 rounded-lg transition">
             ${icon("pencil", "w-4 h-4")}
