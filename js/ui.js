@@ -156,20 +156,62 @@ function formatDateTime(ts) {
   return `${formatDate(ts)} ${formatTime(ts)}`;
 }
 
+// Relative wall-clock presentation, e.g. "42 minutes ago", "2 days ago",
+// "yesterday", "3 months ago". Past only — every call site (bought/added at,
+// restock dueAt) is in the past.
+function formatRelative(ts) {
+  const diff = Date.now() - ts;
+  const plural = (n, unit) => `${n} ${unit}${n === 1 ? "" : "s"}`;
+  if (diff < 45 * 1000) return "just now";
+  if (diff < 90 * 1000) return "a minute ago";
+  if (diff < 60 * 60 * 1000) {
+    return `${plural(Math.round(diff / (60 * 1000)), "minute")} ago`;
+  }
+  if (diff < 24 * 60 * 60 * 1000) {
+    return `${plural(Math.floor(diff / (60 * 60 * 1000)), "hour")} ago`;
+  }
+  if (diff < 48 * 60 * 60 * 1000) return "yesterday";
+  if (diff < 30 * 24 * 60 * 60 * 1000) {
+    return `${plural(Math.round(diff / (24 * 60 * 60 * 1000)), "day")} ago`;
+  }
+  if (diff < 365 * 24 * 60 * 60 * 1000) {
+    return `${plural(Math.round(diff / (30 * 24 * 60 * 60 * 1000)), "month")} ago`;
+  }
+  return `${plural(Math.round(diff / (365 * 24 * 60 * 60 * 1000)), "year")} ago`;
+}
+
+// Chip style per suggestion kind: pivot (added-together companions) is blue,
+// fresh (recent check-off) is emerald, restock (due) is amber.
+const SUGGESTION_STYLES = {
+  pivot: {
+    chip: "border bg-blue-950/40 border-blue-800/40 text-blue-200 hover:bg-blue-900/40",
+    plus: "text-blue-300",
+  },
+  fresh: {
+    chip: "border bg-emerald-950/40 border-emerald-800/40 text-emerald-200 hover:bg-emerald-900/40",
+    plus: "text-emerald-300",
+  },
+  restock: {
+    chip: "border bg-amber-950/40 border-amber-800/40 text-amber-200 hover:bg-amber-900/40",
+    plus: "text-amber-300",
+  },
+};
+
 function suggestionChip(s) {
   const p = s.product;
   let title;
   if (s.kind === "pivot") {
     title = `Added together ${s.count}×`;
   } else if (s.kind === "fresh") {
-    title = `Bought ${formatTime(s.at)}`;
+    title = `Bought ${formatRelative(s.at)}`;
   } else {
-    title = `Restock every ${formatInterval(s.interval)} · due ${formatDate(s.dueAt)}`;
+    title = `Restock ${formatInterval(s.interval)} · due ${formatRelative(s.dueAt)}`;
   }
+  const style = SUGGESTION_STYLES[s.kind] || SUGGESTION_STYLES.restock;
   return `
-    <button data-action="add-suggested" data-id="${p.id}" title="${escapeHtml(title)}" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/40 text-xs text-amber-200 hover:bg-amber-900/40 transition active:scale-95 motion-reduce:transition-none motion-reduce:transform-none">
+    <button data-action="add-suggested" data-id="${p.id}" title="${escapeHtml(title)}" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg text-xs ${style.chip} transition active:scale-95 motion-reduce:transition-none motion-reduce:transform-none">
       ${escapeHtml(p.defaultSpelling)}
-      ${icon("plus", "w-3.5 h-3.5 text-amber-300")}
+      ${icon("plus", `w-3.5 h-3.5 ${style.plus}`)}
     </button>`;
 }
 
@@ -514,8 +556,8 @@ function renderCatalog(products, history) {
         <div class="flex items-center gap-3 shrink-0 ml-3">
           <div class="text-right">
             <div class="text-sm text-slate-300">${times}×</div>
-            <div class="text-[10px] text-slate-500">${last ? `last bought ${formatDate(last)}` : "never bought"}</div>
-            <div class="text-[10px] text-slate-500">${added ? `last added ${formatDate(added)}` : "never added"}</div>
+            <div class="text-[10px] text-slate-500">${last ? `last bought ${formatRelative(last)}` : "never bought"}</div>
+            <div class="text-[10px] text-slate-500">${added ? `last added ${formatRelative(added)}` : "never added"}</div>
             <div class="text-[10px] text-slate-500">${p.restockInterval ? `restock ${formatInterval(p.restockInterval)}` : ""}</div>
           </div>
           <button data-action="rename-product" data-id="${p.id}" aria-label="Rename product" title="Rename" class="text-slate-500 hover:text-slate-200 p-1 rounded-lg transition">
