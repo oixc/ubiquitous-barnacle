@@ -26,9 +26,4 @@ For example:
 * Item Frequency & Recommendations: Local history tracking to calculate addition frequencies, helping generate templates and smart restock prompts.
 
 ## Todo
-3. details for items. defaults per product. for example for quantities — DONE: Items carry a free-text Detail; Products learn up to four synced Presets (consolidated, e.g. `500g` ≡ `500 g`) offered as one-tap choices at entry (see CONTEXT.md, ADR-0004).
-4. order shopping list to reflect typical purchase order
-5. UI: a few light animations?
-6. rename in domain model: bought list = recent list. to buy = no name
-7. rework suggestions based on "restock interval" and last purchase
-8. log times when items are added to improve suggestions
+- Open ideas are tracked as tickets under `.scratch/readme-todos/issues/`.
