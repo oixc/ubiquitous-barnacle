@@ -57,14 +57,3 @@ export function remove(store, id) {
     tx.onerror = () => reject(tx.error);
   });
 }
-
-export function removeMany(store, ids) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, "readwrite");
-    for (const id of ids) {
-      tx.objectStore(store).delete(id);
-    }
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}

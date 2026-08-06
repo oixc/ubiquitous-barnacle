@@ -2,6 +2,8 @@
 // Receives data and callbacks; never touches IndexedDB or ntfy directly.
 // Events are delegated: elements carry data-action / data-id attributes.
 
+import { normalizeText } from "./catalog.js";
+
 let actions = {};
 let showView = () => {};
 let rerender = () => {};
@@ -28,7 +30,7 @@ const ICONS = {
     'M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5',
 };
 
-export function icon(name, cls = "w-5 h-5") {
+function icon(name, cls = "w-5 h-5") {
   return `<svg class="${cls}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${ICONS[name] || ""}"/></svg>`;
 }
 
@@ -103,21 +105,17 @@ function renderSyncControls(dailyCount, enabled) {
 
 let currentSuggestions = [];
 
-function normalizePrefix(str) {
-  return String(str).toLowerCase().replace(/\s+/g, " ").trim();
-}
-
 // Live filter: while the add input is non-empty, show only chips whose Product
 // spelling or aliases start with the typed text; otherwise the full strip.
 function suggestionsFilter() {
   const input = document.getElementById("item-input");
-  const prefix = input ? normalizePrefix(input.value) : "";
+  const prefix = input ? normalizeText(input.value) : "";
   if (!prefix) return currentSuggestions;
   return currentSuggestions.filter((s) => {
     const product = s && s.product;
     if (!product) return false;
     const spellings = [product.defaultSpelling, ...(product.aliases || [])];
-    return spellings.some((sp) => normalizePrefix(sp).startsWith(prefix));
+    return spellings.some((sp) => normalizeText(sp).startsWith(prefix));
   });
 }
 
@@ -257,7 +255,7 @@ export function setSyncStatus(status) {
   el.innerHTML = `<span class="w-2 h-2 rounded-full ${s.dot}"></span>${s.label ? `<span>${s.label}</span>` : ""}`;
 }
 
-export function setListName(listName) {
+function setListName(listName) {
   const el = document.getElementById("drawer-list-name");
   if (el) el.textContent = listName;
 }

@@ -143,38 +143,35 @@ export async function publishAction(action) {
   }
 }
 
-export async function handleRemoteAction(action) {
+async function handleRemoteAction(action) {
   const listName = getListName();
 
   if (action.type === "PUT_ITEM") {
     if (action.item.list !== listName) return;
-    // Coupled transport: PUT_ITEM carries its Product so the receiving Peer can
-    // always render the Item without a separate Product message. No re-broadcast.
-    if (action.product && action.product.list === listName) {
-      await apply.putProduct(action.product, false);
-    }
-    const products = await db.getAll("products", listName);
-    if (!products.some((p) => p.id === action.item.productId)) {
-      // Unknown Product: pull the full List state instead of storing a dangling Item.
+    // Coupled transport (ADR-0005): a PUT_ITEM carries its Product so the
+    // receiving Peer can always render the Item without a separate message. A
+    // missing or foreign Product would leave a dangling Item — pull the full
+    // List state instead. No re-broadcast: the wire face never echoes.
+    if (!action.product || action.product.list !== listName) {
       publishAction({ type: "REQUEST_SYNC", ts: Date.now() });
       return;
     }
-    await apply.putItem(action.item, false);
+    await apply.putItem(action.item, action.product);
   } else if (action.type === "DELETE_ITEM") {
     if (!action.id.startsWith(listName + "::")) return;
     // Pass the carried snapshot so the receiving Peer can derive the purchase
     // event even for an Item it never stored (added + checked off while offline).
-    await apply.deleteItem(action.id, false, {
+    await apply.deleteItem(action.id, {
       productId: action.productId,
       detail: action.detail || "",
       deletedAt: action.deletedAt,
     });
   } else if (action.type === "PUT_PRODUCT") {
     if (action.product.list !== listName) return;
-    await apply.putProduct(action.product, false);
+    await apply.putProduct(action.product);
   } else if (action.type === "DELETE_PRODUCT") {
     if (!action.id.startsWith(listName + "::")) return;
-    await apply.deleteProduct(action.id, false);
+    await apply.deleteProduct(action.id);
   } else if (action.type === "REQUEST_SYNC") {
     if (
       action.ts !== undefined &&
@@ -191,12 +188,12 @@ export async function handleRemoteAction(action) {
   } else if (action.type === "FULL_SYNC") {
     if (Array.isArray(action.items)) {
       for (const item of action.items) {
-        if (item.list === listName) await apply.putItem(item, false);
+        if (item.list === listName) await apply.putItem(item);
       }
     }
     if (Array.isArray(action.products)) {
       for (const product of action.products) {
-        if (product.list === listName) await apply.putProduct(product, false);
+        if (product.list === listName) await apply.putProduct(product);
       }
     }
   }

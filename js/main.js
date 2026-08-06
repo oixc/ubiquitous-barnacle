@@ -1,6 +1,7 @@
 // js/main.js — Bootstrap, app state, and the app action layer.
-// Owns listName/PEER_ID, coordinates db / sync / catalog / ui, and exposes
-// the `actions` used by ui.js and injected into sync.js + catalog.js.
+// Owns listName/PEER_ID, coordinates db / sync / catalog / ui, and exposes two
+// write faces: `actions` (local mutations — persist + announce) used by ui.js
+// and catalog.js, and `wire` (peer mutations — persist only) used by sync.js.
 
 import * as db from "./db.js";
 import * as sync from "./sync.js";
@@ -78,16 +79,6 @@ async function renderAll() {
 }
 
 // --- User actions ---
-async function addItem(text) {
-  const { productText, detail, skipNearMiss } =
-    await catalog.splitProductDetail(text);
-  const { product, productChanged } = await catalog.resolveProduct(
-    productText,
-    skipNearMiss,
-  );
-  if (product) await catalog.addItem(product, detail, productChanged);
-}
-
 function switchList(newList) {
   const trimmed = newList && newList.trim();
   if (!trimmed || trimmed === listName) return;
@@ -119,10 +110,119 @@ function copyInviteLink() {
   });
 }
 
-// --- App actions (single write path for local UI, remote actions, and catalog) ---
+// --- Write path (single write path for local UI, remote actions, and catalog) ---
+// One implementation per mutation; the two faces differ only in whether they
+// announce to Peers: `actions` (local) persists + derives + announces + renders,
+// `wire` (remote application) persists + derives + renders but never echoes.
+async function writeItem(item, product = null, announce = false) {
+  const items = await db.getAll("items", listName);
+  const isNew = !items.some((i) => i.id === item.id);
+  if (product) await db.put("products", product);
+  await db.put("items", item);
+  if (isNew) {
+    // Add-event derivation (ADR-0008): a PUT_ITEM for an Item new to this
+    // device records an add event from the Item's createdAt. A re-add inside
+    // the Undo window cancels the previous purchase instead and records
+    // nothing itself (the paired add survives as the last independent add).
+    // Derived ids keep the 12h SSE replay / FULL_SYNC re-puts idempotent.
+    const undone =
+      ENABLE_UNDO && (await catalog.cancelUndoIfFresh(item.productId));
+    if (!undone) {
+      await db.put("events", {
+        id: `${listName}::add::${item.id}`,
+        list: listName,
+        kind: "add",
+        itemId: item.id,
+        productId: item.productId,
+        detail: item.detail || "",
+        at: item.createdAt,
+      });
+    }
+  }
+  if (announce) {
+    // Coupled transport (ADR-0005): PUT_ITEM always carries its Product so
+    // Peers can render the Item (and its aliases/presets) without a separate
+    // Product message. The caller supplies the Product it just persisted.
+    sync.publishAction({ type: "PUT_ITEM", item, product });
+  }
+  renderAll();
+}
+
+async function writeProduct(product, announce = false) {
+  await db.put("products", product);
+  if (announce) sync.publishAction({ type: "PUT_PRODUCT", product });
+  renderAll();
+}
+
+async function writeDelete(id, snapshot = null, announce = false) {
+  // snapshot: { productId, detail, deletedAt } — the Item data carried by a
+  // wire DELETE_ITEM, so a Peer can record the purchase event even for an
+  // Item it never stored. deletedAt present only on check-offs.
+  const items = await db.getAll("items", listName);
+  const item = items.find((i) => i.id === id);
+  const productId =
+    (snapshot && snapshot.productId) || (item && item.productId);
+  const detail = (snapshot && snapshot.detail) || (item && item.detail) || "";
+  if (!item && !(snapshot && snapshot.productId)) return;
+  const deletedAt = snapshot && snapshot.deletedAt;
+  await db.remove("items", id);
+  if (deletedAt != null) {
+    // Purchase-event derivation (ADR-0008): a check-off DELETE_ITEM records a
+    // purchase event from deletedAt. Plain removals record nothing.
+    await db.put("events", {
+      id: `${listName}::purchase::${id}`,
+      list: listName,
+      kind: "purchase",
+      itemId: id,
+      productId,
+      detail,
+      at: deletedAt,
+    });
+    // Restock stats live on the Product (ticket 05): refreshed only when a
+    // purchase is recorded, so no per-render recompute. Local-only write — the
+    // updated stats ride on the next Item broadcast like other Product edits.
+    await catalog.refreshProductRestock(productId);
+  }
+  if (announce) {
+    // DELETE_ITEM carries the Item snapshot; deletedAt is present only on
+    // check-offs (buys), absent for plain removals (ADR-0007).
+    const payload = {
+      type: "DELETE_ITEM",
+      id,
+      productId,
+      detail,
+    };
+    if (deletedAt != null) payload.deletedAt = deletedAt;
+    sync.publishAction(payload);
+  }
+  renderAll();
+}
+
+async function writeDeleteProduct(id, announce = false) {
+  if (announce) {
+    const items = await db.getAll("items", listName);
+    if (items.some((i) => i.productId === id)) {
+      alert(
+        "This product is still on the list. Remove it from the list first.",
+      );
+      return;
+    }
+    const products = await db.getAll("products", listName);
+    const product = products.find((p) => p.id === id);
+    if (!product) return;
+    if (!confirm(`Delete "${product.defaultSpelling}" from the catalog?`)) {
+      return;
+    }
+  }
+  await db.remove("products", id);
+  if (announce) sync.publishAction({ type: "DELETE_PRODUCT", id });
+  renderAll();
+}
+
+// --- Local face (used by ui.js and catalog.js) ---
 const actions = {
   getListName: () => listName,
-  addItem,
+  addItem: (text) => catalog.addText(text),
   matchProduct: catalog.matchProduct,
   addItemWithDetail: async (productId, detail) => {
     const products = await db.getAll("products", listName);
@@ -145,167 +245,48 @@ const actions = {
     backup.downloadBackup(await backup.buildExport());
   },
   importBackup: async (file) => {
-    let data;
-    try {
-      data = JSON.parse(await file.text());
-    } catch (err) {
-      alert("That file isn't a valid backup.");
-      return;
-    }
-    if (
-      !data ||
-      data.version !== backup.FORMAT_VERSION ||
-      typeof data.list !== "string" ||
-      !Array.isArray(data.products) ||
-      !Array.isArray(data.events)
-    ) {
-      alert("That file isn't a valid backup.");
-      return;
-    }
-    const plan = await backup.planImport(data);
-    const s = plan.summary;
-    let msg = `Import backup from "${s.sourceList}" into "${s.targetList}"?\n\n`;
-    if (s.crossList) {
-      msg +=
-        "This backup is from a different list — its records will be remapped to this list.\n\n";
-    }
-    msg +=
-      `Catalog: ${s.productsToAdd} to add, ${s.productsMerged} already present ` +
-      `(${s.aliasesToAdd} aliases, ${s.presetsToAdd} presets to fold in).\n` +
-      `Events: ${s.eventsToAdd} to add, ${s.eventsSkipped} duplicates skipped.\n\n` +
-      "Restoring is local — nothing is synced to other devices.";
-    if (!confirm(msg)) return;
-    await backup.applyPlan(plan);
-    renderAll();
+    if (await backup.importFromFile(file)) renderAll();
   },
   setSyncEnabled: (value) => {
     localStorage.setItem("pwa_grocery_sync", value ? "1" : "0");
     sync.setSyncEnabled(value);
     renderAll();
   },
-
-  putItem: async (item, broadcast = true) => {
-    const items = await db.getAll("items", listName);
-    const isNew = !items.some((i) => i.id === item.id);
-    await db.put("items", item);
-    if (isNew) {
-      // Add-event derivation (ADR-0008): a PUT_ITEM for an Item new to this
-      // device records an add event from the Item's createdAt. A re-add inside
-      // the Undo window cancels the previous purchase instead and records
-      // nothing itself (the paired add survives as the last independent add).
-      // Derived ids keep the 12h SSE replay / FULL_SYNC re-puts idempotent.
-      const undone =
-        ENABLE_UNDO && (await catalog.cancelUndoIfFresh(item.productId));
-      if (!undone) {
-        await db.put("events", {
-          id: `${listName}::add::${item.id}`,
-          list: listName,
-          kind: "add",
-          itemId: item.id,
-          productId: item.productId,
-          detail: item.detail || "",
-          at: item.createdAt,
-        });
-      }
-    }
-    if (broadcast) {
-      // Coupled transport: always attach the Item's Product so Peers can render
-      // the Item (and its aliases/presets) without a separate Product message.
-      const products = await db.getAll("products", listName);
-      const product = products.find((p) => p.id === item.productId) || null;
-      sync.publishAction({ type: "PUT_ITEM", item, product });
-    }
-    renderAll();
-  },
-  deleteItem: async (id, broadcast = true, snapshot = null) => {
-    // snapshot: { productId, detail, deletedAt } — the Item data carried by a
-    // wire DELETE_ITEM, so a Peer can record the purchase event even for an
-    // Item it never stored. deletedAt present only on check-offs.
-    const items = await db.getAll("items", listName);
-    const item = items.find((i) => i.id === id);
-    const productId =
-      (snapshot && snapshot.productId) || (item && item.productId);
-    const detail = (snapshot && snapshot.detail) || (item && item.detail) || "";
-    if (!item && !(snapshot && snapshot.productId)) return;
-    const deletedAt = snapshot && snapshot.deletedAt;
-    await db.remove("items", id);
-    if (deletedAt != null) {
-      // Purchase-event derivation (ADR-0008): a check-off DELETE_ITEM records a
-      // purchase event from deletedAt. Plain removals record nothing.
-      await db.put("events", {
-        id: `${listName}::purchase::${id}`,
-        list: listName,
-        kind: "purchase",
-        itemId: id,
-        productId,
-        detail,
-        at: deletedAt,
-      });
-      // Restock stats live on the Product (ticket 05): refreshed only when a
-      // purchase is recorded, so no per-render recompute. Local-only write —
-      // the updated stats ride on the next Item broadcast like other edits.
-      await catalog.refreshProductRestock(productId);
-    }
-    if (broadcast) {
-      // DELETE_ITEM carries the Item snapshot; deletedAt is present only on
-      // check-offs (buys), absent for plain removals (ADR-0007).
-      const payload = {
-        type: "DELETE_ITEM",
-        id,
-        productId,
-        detail,
-      };
-      if (deletedAt != null) payload.deletedAt = deletedAt;
-      sync.publishAction(payload);
-    }
-    renderAll();
-  },
-  putProduct: async (product, broadcast = true) => {
-    await db.put("products", product);
-    if (broadcast) sync.publishAction({ type: "PUT_PRODUCT", product });
-    renderAll();
-  },
-  deleteProduct: async (id, broadcast = true) => {
-    if (broadcast) {
-      const items = await db.getAll("items", listName);
-      if (items.some((i) => i.productId === id)) {
-        alert(
-          "This product is still on the list. Remove it from the list first.",
-        );
-        return;
-      }
-      const products = await db.getAll("products", listName);
-      const product = products.find((p) => p.id === id);
-      if (!product) return;
-      if (!confirm(`Delete "${product.defaultSpelling}" from the catalog?`)) {
-        return;
-      }
-    }
-    await db.remove("products", id);
-    if (broadcast) sync.publishAction({ type: "DELETE_PRODUCT", id });
-    renderAll();
-  },
+  putItem: (item, product) => writeItem(item, product, true),
+  putProduct: (product) => writeProduct(product, true),
+  // Local-only product write (e.g. restock stats): persisted, never broadcast.
+  // The change rides on the next Item broadcast like other Product edits.
+  persistProduct: (product) => writeProduct(product, false),
+  checkOff: (id) => writeDelete(id, { deletedAt: Date.now() }, true),
+  removeItem: (id) => writeDelete(id, null, true),
+  deleteProduct: (id) => writeDeleteProduct(id, true),
   renameProduct: async (productId, newSpelling) => {
     const products = await db.getAll("products", listName);
     const product = products.find((p) => p.id === productId);
     if (!product) return;
     product.defaultSpelling = newSpelling;
-    await actions.putProduct(product, true);
+    await actions.putProduct(product);
   },
   deletePreset: async (productId, detail) => {
     const products = await db.getAll("products", listName);
     const product = products.find((p) => p.id === productId);
     if (!product || !product.presets) return;
     product.presets = product.presets.filter((p) => p !== detail);
-    await actions.putProduct(product, true);
+    await actions.putProduct(product);
   },
-  checkOff: (id) => actions.deleteItem(id, true, { deletedAt: Date.now() }),
-  removeItem: (id) => actions.deleteItem(id, true),
   suggest: async (productId) => {
     const products = await db.getAll("products", listName);
     const product = products.find((p) => p.id === productId);
     if (product) await catalog.addItem(product);
   },
+};
+
+// --- Wire face (used by sync.js): persist + derive, never echo ---
+const wire = {
+  putItem: (item, product) => writeItem(item, product, false),
+  putProduct: (product) => writeProduct(product, false),
+  deleteItem: (id, snapshot) => writeDelete(id, snapshot, false),
+  deleteProduct: (id) => writeDeleteProduct(id, false),
 };
 
 // --- Wire up modules ---
@@ -314,7 +295,7 @@ sync.configureSync({
   peerId: PEER_ID,
   enabled: ENABLE_SYNC && localStorage.getItem("pwa_grocery_sync") !== "0",
   onStatus: (status) => ui.setSyncStatus(status),
-  apply: actions,
+  apply: wire,
 });
 
 catalog.configureCatalog({

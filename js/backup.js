@@ -176,3 +176,41 @@ export async function applyPlan(plan) {
     await db.put("events", e);
   }
 }
+
+// Orchestrates a restore from a backup file: parse, validate, plan, confirm,
+// apply. Returns true when records were written so the caller can re-render.
+// Local-only — nothing is broadcast to Peers.
+export async function importFromFile(file) {
+  let data;
+  try {
+    data = JSON.parse(await file.text());
+  } catch (err) {
+    alert("That file isn't a valid backup.");
+    return false;
+  }
+  if (
+    !data ||
+    data.version !== FORMAT_VERSION ||
+    typeof data.list !== "string" ||
+    !Array.isArray(data.products) ||
+    !Array.isArray(data.events)
+  ) {
+    alert("That file isn't a valid backup.");
+    return false;
+  }
+  const plan = await planImport(data);
+  const s = plan.summary;
+  let msg = `Import backup from "${s.sourceList}" into "${s.targetList}"?\n\n`;
+  if (s.crossList) {
+    msg +=
+      "This backup is from a different list — its records will be remapped to this list.\n\n";
+  }
+  msg +=
+    `Catalog: ${s.productsToAdd} to add, ${s.productsMerged} already present ` +
+    `(${s.aliasesToAdd} aliases, ${s.presetsToAdd} presets to fold in).\n` +
+    `Events: ${s.eventsToAdd} to add, ${s.eventsSkipped} duplicates skipped.\n\n` +
+    "Restoring is local — nothing is synced to other devices.";
+  if (!confirm(msg)) return false;
+  await applyPlan(plan);
+  return true;
+}

@@ -1,8 +1,9 @@
 // js/catalog.js — Product resolution, Item creation, and suggestion logic.
-// Text-matching helpers, the resolve/add flow, restock prompts (ADR-0008),
-// added-together sessions (09), typical purchase order (06), soft-priority
-// ranking (11), and undo classification. Reads IndexedDB directly; Product
-// writes go through the injected `apply` actions.
+// addText owns the text→Item flow (split, resolve, alias-confirm); restock
+// prompts (ADR-0008), added-together sessions (09), typical purchase order
+// (06), soft-priority ranking (11), and undo classification live here too.
+// Reads IndexedDB directly; Item/Product writes go through the injected
+// `apply` actions.
 
 import * as db from "./db.js";
 
@@ -23,7 +24,7 @@ export function normalizeText(str) {
 // Detail consolidation: case/whitespace folding plus a space between digit and
 // letter, so "500g", "500  g" and "500 G" all read as "500 g". No unit
 // dictionary: "g" and "grams" stay distinct.
-export function normalizeDetail(str) {
+function normalizeDetail(str) {
   return normalizeText(str).replace(/(\d)([a-z])/g, "$1 $2");
 }
 
@@ -31,7 +32,7 @@ const PRESET_CAP = 4;
 
 // Returns the canonical Preset spelling for a Detail, or the raw Detail itself
 // when no Preset consolidates to it.
-export function canonicalizeDetail(product, detail) {
+function canonicalizeDetail(product, detail) {
   const value = (detail || "").trim();
   if (!value) return "";
   const normalized = normalizeDetail(value);
@@ -53,7 +54,7 @@ function ensurePreset(product, detail) {
   return true;
 }
 
-export function levenshtein(a, b) {
+function levenshtein(a, b) {
   const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
   for (let j = 0; j <= b.length; j++) dp[0][j] = j;
   for (let i = 1; i <= a.length; i++) {
@@ -68,20 +69,20 @@ export function levenshtein(a, b) {
   return dp[a.length][b.length];
 }
 
-// Splits an input line into a Product part and a Detail part. The Product part
-// is the longest known Product spelling (or alias) that is a word-boundary
-// prefix; the remainder is the Detail. When no known Product matches a
-// multi-word input, the whole line becomes a new Product and the input is
-// treated as its exact spelling (skipNearMiss) — Details can only be attached
-// once the Product is in the Catalog.
-export async function splitProductDetail(text) {
+// Splits an input line into a Product part and a Detail part against an
+// already-loaded Catalog (the caller reads once). The Product part is the
+// longest known Product spelling (or alias) that is a word-boundary prefix;
+// the remainder is the Detail. When no known Product matches a multi-word
+// input, the whole line becomes a new Product and the input is treated as its
+// exact spelling (skipNearMiss) — Details can only be attached once the
+// Product is in the Catalog.
+function splitProductDetail(text, products) {
   const trimmed = text.trim();
   const tokens = trimmed.split(/\s+/);
   if (tokens.length < 2) {
     return { productText: trimmed, detail: "", skipNearMiss: false };
   }
 
-  const products = await db.getAll("products", getListName());
   const known = new Set();
   for (const p of products) {
     known.add(normalizeText(p.defaultSpelling));
@@ -115,14 +116,11 @@ export async function matchProduct(text) {
   );
 }
 
-export async function resolveProduct(text, skipNearMiss = false) {
-  const exact = await matchProduct(text);
-  if (exact) return { product: exact, productChanged: false };
-
-  const listName = getListName();
+// Closest known Product within the near-miss threshold (one edit for short
+// text, two for longer), or null. Only asked when the input is not an exact
+// known spelling.
+function nearMatch(products, text) {
   const normalized = normalizeText(text);
-  const products = await db.getAll("products", listName);
-
   let best = null;
   let bestDist = Infinity;
   for (const p of products) {
@@ -135,37 +133,59 @@ export async function resolveProduct(text, skipNearMiss = false) {
     }
   }
   const threshold = normalized.length < 5 ? 1 : 2;
-  if (!skipNearMiss && best && bestDist <= threshold) {
-    if (confirm(`Did you mean "${best.defaultSpelling}"?`)) {
-      const changed = !best.aliases.some((a) => normalizeText(a) === normalized);
-      if (changed) {
-        best.aliases.push(text);
-        // Persist locally; the change rides on the next Item broadcast.
-        await apply.putProduct(best, false);
-      }
-      return { product: best, productChanged: changed };
+  if (best && bestDist <= threshold) return best;
+  return null;
+}
+
+// Resolves a typed line (Product + optional Detail) into an Item on the List,
+// reading the Catalog and the List once for the whole flow. Exact spelling
+// wins; a near-miss of a known Product becomes an alias only after the typist
+// confirms ("did you mean …?"); truly novel text creates a Product. The
+// ADR-0005 branch — whether a Product change rides on the Item's PUT_ITEM or
+// must broadcast on its own — is decided here, from whether the Item is
+// already on the List.
+export async function addText(text) {
+  const listName = getListName();
+  const [products, items] = await Promise.all([
+    db.getAll("products", listName),
+    db.getAll("items", listName),
+  ]);
+
+  const { productText, detail, skipNearMiss } = splitProductDetail(
+    text,
+    products,
+  );
+
+  let product = products.find(
+    (p) =>
+      normalizeText(p.defaultSpelling) === normalizeText(productText) ||
+      p.aliases.some((a) => normalizeText(a) === normalizeText(productText)),
+  );
+  let productChanged = false;
+  if (!product) {
+    const near = skipNearMiss ? null : nearMatch(products, productText);
+    if (near && confirm(`Did you mean "${near.defaultSpelling}"?`)) {
+      product = near;
+      productChanged = !product.aliases.some(
+        (a) => normalizeText(a) === normalizeText(productText),
+      );
+      if (productChanged) product.aliases.push(productText);
+    } else {
+      product = {
+        id: `${listName}::${uid("prod_")}`,
+        list: listName,
+        defaultSpelling: productText,
+        aliases: [],
+        presets: [],
+      };
+      productChanged = true;
     }
   }
 
-  const product = {
-    id: `${listName}::${uid("prod_")}`,
-    list: listName,
-    defaultSpelling: text,
-    aliases: [],
-    presets: [],
-  };
-  await apply.putProduct(product, false);
-  return { product, productChanged: true };
-}
-
-export async function addItem(product, detail = "", productChanged = false) {
-  const listName = getListName();
-  const items = await db.getAll("items", listName);
-  const existing = items.find((i) => i.productId === product.id);
-  if (existing) {
-    // No Item message will carry the Product, so product-only changes (e.g. a
-    // freshly confirmed Alias) must broadcast on their own.
-    if (productChanged) await apply.putProduct(product, true);
+  if (items.some((i) => i.productId === product.id)) {
+    // No Item message will carry the Product, so a product-only change (a
+    // freshly confirmed Alias) must broadcast on its own (ADR-0005).
+    if (productChanged) await apply.putProduct(product);
     return;
   }
 
@@ -177,19 +197,38 @@ export async function addItem(product, detail = "", productChanged = false) {
   };
   if (detail) {
     item.detail = canonicalizeDetail(product, detail);
-    // Learn the Preset before the Item broadcast so it rides inside the
-    // PUT_ITEM payload instead of a second Product message.
-    if (ensurePreset(product, item.detail)) await apply.putProduct(product, false);
+    // Learn the Preset; it rides inside the PUT_ITEM's Product instead of a
+    // second Product message (ADR-0005).
+    ensurePreset(product, item.detail);
   }
-  await apply.putItem(item, true);
+  await apply.putItem(item, product);
+}
+
+export async function addItem(product, detail = "") {
+  const listName = getListName();
+  const items = await db.getAll("items", listName);
+  if (items.some((i) => i.productId === product.id)) return;
+
+  const item = {
+    id: `${listName}::${uid("item_")}`,
+    list: listName,
+    productId: product.id,
+    createdAt: Date.now(),
+  };
+  if (detail) {
+    item.detail = canonicalizeDetail(product, detail);
+    // Learn the Preset; it rides inside the PUT_ITEM's Product (ADR-0005).
+    ensurePreset(product, item.detail);
+  }
+  await apply.putItem(item, product);
 }
 
 // Sets (or clears) an Item's Detail from the inline editor; canonicalizes
 // against the Product's Presets and learns new Details as Presets.
 export async function setItemDetail(item, product, detail) {
   item.detail = canonicalizeDetail(product, detail);
-  if (ensurePreset(product, item.detail)) await apply.putProduct(product, false);
-  await apply.putItem(item, true);
+  ensurePreset(product, item.detail);
+  await apply.putItem(item, product);
 }
 
 // --- Restock prompts (ADR-0008: interval from purchase gaps) ---
@@ -208,7 +247,7 @@ const TRIP_WINDOW_MS = 60 * 60 * 1000;
 
 // Median of an array of values (mean of the two central values on an even
 // count); null for an empty array.
-export function median(values) {
+function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
   if (sorted.length === 0) return null;
   const mid = Math.floor(sorted.length / 2);
@@ -219,7 +258,7 @@ export function median(values) {
 // Median of the gaps between consecutive ascending timestamps; null when fewer
 // than two timestamps give no gap at all. Deliberately keeps the upper-middle
 // gap on an even count (restock intervals predate the shared `median` helper).
-export function medianGap(times) {
+function medianGap(times) {
   const sorted = [...times].sort((a, b) => a - b);
   if (sorted.length < 2) return null;
   const gaps = [];
@@ -253,7 +292,7 @@ export async function refreshProductRestock(productId) {
   } else {
     product.restockInterval = interval;
   }
-  await apply.putProduct(product, false);
+  await apply.persistProduct(product);
 }
 
 // --- Typical purchase order (06) ---
@@ -318,14 +357,14 @@ function segmentEvents(events, gapMs) {
 }
 
 // Adding sessions (09): segments of add events for added-together counting.
-export function groupAddingSessions(addEvents, gapMs = SESSION_GAP_MS) {
+function groupAddingSessions(addEvents, gapMs = SESSION_GAP_MS) {
   return segmentEvents(addEvents, gapMs);
 }
 
 // Counts how many adding sessions each pair of Products co-occurred in. The
 // result maps every Product to its per-companion counts, so both orderings of a
 // pair are stored under the two Products and no id-format parsing is needed.
-export function coOccurrenceCounts(sessions) {
+function coOccurrenceCounts(sessions) {
   const counts = new Map();
   for (const session of sessions) {
     const products = [...new Set(session.map((e) => e.productId))];
@@ -350,7 +389,7 @@ export function coOccurrenceCounts(sessions) {
 
 // Companion Products of `productId` that co-occurred with it in at least
 // `minSessions` adding sessions, most-often-first (noise guard).
-export function addedTogetherWith(
+function addedTogetherWith(
   productId,
   sessions,
   minSessions = MIN_COOCCUR_SESSIONS,
