@@ -18,3 +18,7 @@ open.
   fights Peers who re-broadcast their own Products back.
 - **Restrict imports to the exporting List**: rejected — remapping IDs makes
   cross-List restore safe enough to allow.
+
+Superseded in part: ADR-0008 replaces the Purchase-history half of the backup
+with a unified device-local event history (add + purchase events, format v2).
+The Catalog merge rules above are unchanged.

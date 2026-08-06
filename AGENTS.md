@@ -46,27 +46,31 @@ build migration mechanisms.
   the free `since=12h` SSE replay. A 429 publish sets the status pill to
   "Sync limited" until the next success or midnight UTC.
 - Backup/restore lives in `js/backup.js` (configured from `main.js`): a single
-  versioned JSON file exports a List's Catalog + Purchase history; restoring
-  merges local-only — never broadcast — with Products deduped by normalized
-  spelling (existing wins, aliases/presets fold in) and history by
-  (productId, boughtAt, detail); cross-List restores remap IDs (see ADR-0006).
+  versioned JSON file exports a List's Catalog + event history (add and purchase
+  events — format v2, see ADR-0008); restoring merges local-only — never
+  broadcast — with Products deduped by normalized spelling (existing wins,
+  aliases/presets fold in) and events deduped by event key; cross-List restores
+  remap IDs (see ADR-0006, ADR-0008).
   Caveat: restoring into an empty DB before the first Sync connection suppresses
   the automatic fresh-join catch-up pull, so hit the drawer's Refresh afterwards
   to still fetch live Items/Products from Peers.
-- IndexedDB is `GroceryDB` v3 (version bumps freely in early development): `items`,
-  `products`, and `purchaseHistory` stores,
-  each with a `byList` index. Item/Product IDs are prefixed with the List name
+- IndexedDB is `GroceryDB` (version bumps freely in early development, currently
+  v4): `items`, `products`, and `events` stores, each with a `byList` index —
+  `events` (ADR-0008) is the device-local add/purchase history replacing the old
+  `purchaseHistory` store. Item/Product IDs are prefixed with the List name
   (`${listName}::…`) so one DB can hold several Lists without cross-talk; on List
   switch, reads are scoped by `listName` and nothing carries over.
 - Tailwind comes from the CDN (`cdn.tailwindcss.com`), not a build pipeline.
   The app is dark-mode only (slate-950 base); there is no theme switcher and no
   `dark:` variant usage. Don't reintroduce a light theme or a toggle.
 - Domain vocabulary lives in `CONTEXT.md`, architectural decisions in `docs/adr/`.
-  Use that language in code and discussions. Note: Clearing and the
-  Purchase-history record (boughtAt timestamp per buy, device-local) are
-  implemented; Catalog merge on import is decided (spelling-dedupe, existing
-  wins — see ADR-0006), while general peer-meeting reconciliation of duplicate
-  Products remains undecided (see ADR-0003).
+  Use that language in code and discussions. Note: Clearing and the bought shelf
+  are being replaced by check-off + undo (ADR-0007), and the Purchase-history
+  record is being replaced by the device-local event store (ADR-0008); the
+  current `js/` code still implements the old model. Catalog merge on import is
+  decided (spelling-dedupe, existing wins — see ADR-0006), while general
+  peer-meeting reconciliation of duplicate Products remains undecided (see
+  ADR-0003).
 
 ## Agent skills
 

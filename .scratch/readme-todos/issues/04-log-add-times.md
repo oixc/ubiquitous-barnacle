@@ -1,14 +1,24 @@
-# 04 — Log add-times per Product
+# 04 — Add-time consumers: Catalog last-added, merged History view, backup v2
 
-**What to build:** Every time an Item is added to the List — typed, revived, added via a suggestion or Preset chip, and added from a remote Peer — the moment is recorded as a per-Product add-time event in a new device-local store (same lifecycle as Purchase history: never synced, so the daily sync budget is untouched). The Catalog view shows each Product's "last added" time so the log is visible and verifiable rather than an invisible data sink. This record is the primary signal for the restock-interval suggestions ticket.
+**What to build:** The add-side surface of the unified event store (ADR-0008;
+derivation lives in 01). Add events are already recorded by 01; this ticket
+makes them visible and portable. The Catalog view shows each Product's "last
+added" time alongside its buy count / last-bought. The History view merges add
+and purchase events in chronological order (with a kind badge), replacing the
+purchases-only list. Backup format v2 exports both event kinds and restores them
+with `productId` + `itemId` remapping on cross-List imports. Restock-interval,
+added-together, and soft-priority work consume these events (feeds below).
 
 **Feeds:** 05 — restock intervals, 09 — added-together sessions, 11 — soft-priority ranking.
 
-**Blocked by:** None — can start immediately.
+**Blocked by:** 01 — Unified event derivation.
 
 **Status:** ready-for-agent
 
-- [ ] Adding an Item (new or revived, local or remote) writes an add-time event for its Product, scoped to the current List.
-- [ ] The Catalog view shows each Product's last-added time alongside the existing buy count / last-bought.
-- [ ] The new store lives in IndexedDB with the same `byList` scoping as the existing stores; schema version and service-worker cache name are bumped per the repo's gotchas.
-- [ ] Existing Purchase-history behaviour and statistics are unchanged.
+- [ ] Catalog view shows each Product's last-added time alongside the existing buy count / last-bought.
+- [ ] History view renders add and purchase events together, sorted chronologically, each with a kind badge ("Added" / "Bought").
+- [ ] Backup export (format v2) includes both event kinds; restore remaps `productId` and `itemId` and dedupes by event key.
+- [ ] Existing stats consumers (suggestions, catalog counts) read the `events` store filtered by kind; behaviour unchanged.
+
+**Note:** "last added" shows the last independent add — an undo re-add records no
+add event, so it does not move the timestamp.

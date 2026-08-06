@@ -23,14 +23,22 @@ deletion, not a check-off — it records no Purchase.
 _Avoid_: complete, done, tick
 
 **Purchase**:
-A single check-off recorded in the Purchase history, identified by its Product,
-the time of the check-off, and the Detail. Removed from history when the Item is
-undone within the Undo window.
+A single check-off recorded in the event history as a purchase event,
+identified by its Product, the time of the check-off, and the Detail. Removed
+from history when the Item is undone within the Undo window.
+
+**Add event**:
+The event-history record of an Item being added to the List, timestamped at the
+Item's creation. Identified by its Item. Removed from history when the Item is
+undone within the Undo window; an undo re-add records nothing, so add events are
+strictly independent adds. Basis for restock intervals and added-together
+sessions.
 
 **Undo**:
 Re-adding an Item within the Undo window after its check-off — by typing, an
-alias, or a suggestion chip. Undoing cancels the matching Purchase record, so
-accidental check-offs do not pollute statistics.
+alias, or a suggestion chip. Undoing cancels the checked-off Item's purchase
+event and its paired add event, so accidental check-offs do not pollute
+statistics.
 _Avoid_: revive, un-check
 
 **Undo window**:
@@ -70,17 +78,18 @@ is learned. Presets are shared with the List like the Product itself; equal
 spellings consolidate (e.g. "500g" matches "500 g").
 _Avoid_: default (singular — clashes with "Default spelling")
 
-**Purchase history**:
-The device-local record of check-offs, derived from the shared message stream:
-every observed check-off (own or a Peer's) lands in each Peer's history,
-deduplicated by Product, time, and Detail. Undoing an Item cancels the matching
-record. Because every Peer derives the same records from the same stream, the
-histories converge without any dedicated sync.
+**Event history**:
+The device-local record of adds and purchases, derived from the shared message
+stream: every observed new Item (a `PUT_ITEM`) records an add event and every
+observed check-off records a purchase event, each deduplicated by Item. Undoing
+an Item cancels the pair. Because every Peer derives the same events from the
+same stream, the histories converge without any dedicated sync.
+_Avoid_: Purchase history (singular)
 
 **Restock prompt**:
 A suggestion to re-add a Product that is due for restock — its restock interval
-(learned from add-times and Purchase history) has elapsed since the last Purchase.
-Due-based, not raw-frequency-based.
+(learned from add events and purchase events) has elapsed since the last
+Purchase. Due-based, not raw-frequency-based.
 
 **Suggestion**:
 A one-tap chip in the List's single suggestions strip that adds an Item. The
@@ -114,12 +123,12 @@ relay. Its conservation shapes which changes propagate in real time and which
 are pulled on demand.
 
 **Backup**:
-A point-in-time file capturing a List's Catalog and Purchase history, named for
-its source List. The only way to move Purchase history off a device.
+A point-in-time file capturing a List's Catalog and event history, named for its
+source List. The only way to move event history off a device.
 _Avoid_: snapshot, save
 
 **Restore**:
 Applying a Backup to a List: Products merge by spelling (the List's existing
-Product wins; the Backup's aliases and presets fold in), Purchase-history
-records dedupe by identity, and nothing is broadcast to Peers.
+Product wins; the Backup's aliases and presets fold in), event-history records
+dedupe by event identity, and nothing is broadcast to Peers.
 _Avoid_: load
