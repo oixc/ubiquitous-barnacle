@@ -27,3 +27,4 @@ For example:
 
 ## Todo
 - Open ideas are tracked as tickets under `.scratch/readme-todos/issues/`.
+- ui: buy again chips should line wrap to allow more chips on screen  
