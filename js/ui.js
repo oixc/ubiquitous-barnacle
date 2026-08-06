@@ -136,15 +136,35 @@ function formatInterval(ms) {
   return `every ${Math.round(months)} months`;
 }
 
+// ISO 8601 presentation of local wall-clock time: dates YYYY-MM-DD, times HH:MM.
+// Deliberately not toISOString(), which would shift the wall-clock to UTC.
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function formatDate(ts) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function formatTime(ts) {
+  const d = new Date(ts);
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function formatDateTime(ts) {
+  return `${formatDate(ts)} ${formatTime(ts)}`;
+}
+
 function suggestionChip(s) {
   const p = s.product;
   let title;
   if (s.kind === "pivot") {
     title = `Added together ${s.count}×`;
   } else if (s.kind === "fresh") {
-    title = `Bought ${new Date(s.at).toLocaleTimeString()}`;
+    title = `Bought ${formatTime(s.at)}`;
   } else {
-    title = `Restock every ${formatInterval(s.interval)} · due ${new Date(s.dueAt).toLocaleDateString()}`;
+    title = `Restock every ${formatInterval(s.interval)} · due ${formatDate(s.dueAt)}`;
   }
   return `
     <button data-action="add-suggested" data-id="${p.id}" title="${escapeHtml(title)}" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/40 text-xs text-amber-200 hover:bg-amber-900/40 transition active:scale-95 motion-reduce:transition-none motion-reduce:transform-none">
@@ -494,8 +514,8 @@ function renderCatalog(products, history) {
         <div class="flex items-center gap-3 shrink-0 ml-3">
           <div class="text-right">
             <div class="text-sm text-slate-300">${times}×</div>
-            <div class="text-[10px] text-slate-500">${last ? `last bought ${new Date(last).toLocaleDateString()}` : "never bought"}</div>
-            <div class="text-[10px] text-slate-500">${added ? `last added ${new Date(added).toLocaleDateString()}` : "never added"}</div>
+            <div class="text-[10px] text-slate-500">${last ? `last bought ${formatDate(last)}` : "never bought"}</div>
+            <div class="text-[10px] text-slate-500">${added ? `last added ${formatDate(added)}` : "never added"}</div>
             <div class="text-[10px] text-slate-500">${p.restockInterval ? `restock ${formatInterval(p.restockInterval)}` : ""}</div>
           </div>
           <button data-action="rename-product" data-id="${p.id}" aria-label="Rename product" title="Rename" class="text-slate-500 hover:text-slate-200 p-1 rounded-lg transition">
@@ -539,7 +559,7 @@ function renderHistory(history, products) {
           <span class="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${badgeCls}">${badge}</span>
           <span class="text-sm font-medium text-slate-200 truncate">${escapeHtml(name)}${h.detail ? ` <span class="text-xs text-slate-400">· ${escapeHtml(h.detail)}</span>` : ""}</span>
         </div>
-        <span class="text-xs text-slate-500 shrink-0 ml-3">${escapeHtml(new Date(h.at).toLocaleString())}</span>
+        <span class="text-xs text-slate-500 shrink-0 ml-3">${escapeHtml(formatDateTime(h.at))}</span>
       </div>
     `;
     })
