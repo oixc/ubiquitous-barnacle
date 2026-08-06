@@ -24,6 +24,40 @@
     />
 
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @keyframes grocery-row-in {
+        from {
+          opacity: 0;
+          transform: translateY(-6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes grocery-row-out {
+        from {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+        to {
+          opacity: 0;
+          transform: translateY(6px) scale(0.98);
+        }
+      }
+      .animate-row-in {
+        animation: grocery-row-in 120ms ease-out;
+      }
+      .animate-row-out {
+        animation: grocery-row-out 120ms ease-in forwards;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .animate-row-in,
+        .animate-row-out {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body class="bg-slate-950 min-h-screen text-slate-200 pb-16 font-sans">
     <div class="max-w-md mx-auto p-4 sm:p-6">

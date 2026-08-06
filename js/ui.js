@@ -130,7 +130,7 @@ function renderSuggestionStrip() {
       ${visible
         .map(
           (s) => `
-        <button data-action="add-suggested" data-id="${s.product.id}" title="Bought ${s.count}×" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/40 text-xs text-amber-200 hover:bg-amber-900/40 transition">
+        <button data-action="add-suggested" data-id="${s.product.id}" title="Bought ${s.count}×" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/40 text-xs text-amber-200 hover:bg-amber-900/40 transition active:scale-95 motion-reduce:transition-none motion-reduce:transform-none">
           ${escapeHtml(s.product.defaultSpelling)}
           ${icon("plus", "w-3.5 h-3.5 text-amber-300")}
         </button>`,
@@ -234,6 +234,11 @@ export function setListName(listName) {
 
 // --- List view ---
 let listItems = [];
+// Ids rendered last time, to animate newly added Items in on the next render.
+// The first render (and the empty state) seeds the set without animating.
+let prevItemIds = new Set();
+let listInitialized = false;
+
 export function renderList({ items, products, listName }) {
   setListName(listName);
   const productById = new Map(products.map((p) => [p.id, p]));
@@ -244,18 +249,34 @@ export function renderList({ items, products, listName }) {
       <li class="text-center py-8 text-slate-500 text-sm">
         Your list is empty. Add an item above!
       </li>`;
+    prevItemIds = new Set();
+    listInitialized = true;
     return;
   }
 
   items.sort((a, b) => b.createdAt - a.createdAt);
   listItems = items;
 
+  const nextIds = new Set(items.map((i) => i.id));
+  let freshIds = new Set();
+  const reduceMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  if (listInitialized && !reduceMotion) {
+    freshIds = new Set([...nextIds].filter((id) => !prevItemIds.has(id)));
+  }
+  prevItemIds = nextIds;
+  listInitialized = true;
+
   const itemRow = (item) => {
     const product = productById.get(item.productId);
     const text = product ? product.defaultSpelling : "…";
     const detail = item.detail || "";
+    const rowClass = freshIds.has(item.id)
+      ? "flex items-center animate-row-in"
+      : "flex items-center";
     return `
-      <li class="flex items-center">
+      <li class="${rowClass}">
         <button
           data-action="check-off"
           data-id="${item.id}"
@@ -486,6 +507,33 @@ function renderHistory(history, products) {
     .join("");
 }
 
+// Plays the row-out animation before a check-off, then performs it. The
+// timeout is the fallback so the removal never depends on animation timing;
+// reduced-motion users and any missing row skip straight to the action.
+function checkOffItem(el) {
+  const id = el.dataset.id;
+  const li = el.closest("li");
+  if (!li || li.dataset.leaving) {
+    actions.checkOff(id);
+    return;
+  }
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    actions.checkOff(id);
+    return;
+  }
+  li.dataset.leaving = "true";
+  li.classList.add("animate-row-out");
+  let fired = false;
+  const fire = () => {
+    if (fired) return;
+    fired = true;
+    clearTimeout(timer);
+    actions.checkOff(id);
+  };
+  const timer = setTimeout(fire, 200);
+  li.addEventListener("animationend", fire, { once: true });
+}
+
 function bindEvents() {
   const addForm = document.getElementById("add-form");
   const itemInput = document.getElementById("item-input");
@@ -527,7 +575,7 @@ function bindEvents() {
       if (input) input.click();
     } else if (action === "toggle-sync") actions.setSyncEnabled(!syncEnabled);
     else if (action === "remove-item") actions.removeItem(el.dataset.id);
-    else if (action === "check-off") actions.checkOff(el.dataset.id);
+    else if (action === "check-off") checkOffItem(el);
     else if (action === "rename-product") startRename(el.dataset.id);
     else if (action === "delete-product") actions.deleteProduct(el.dataset.id);
     else if (action === "delete-preset")

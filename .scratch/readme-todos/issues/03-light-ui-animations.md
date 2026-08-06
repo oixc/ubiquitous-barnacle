@@ -13,7 +13,7 @@ classes.
 
 **Status:** ready-for-agent
 
-- [ ] Adding an Item animates its row into the List (e.g. slide/fade-in).
-- [ ] Checking off an Item animates its removal (e.g. fade/collapse out before it leaves).
-- [ ] Suggestion chips respond on tap (press/active state).
-- [ ] All animations are disabled or reduced under `prefers-reduced-motion`, and nothing depends on animation timing to function.
+- [x] Adding an Item animates its row into the List (e.g. slide/fade-in).
+- [x] Checking off an Item animates its removal (e.g. fade/collapse out before it leaves).
+- [x] Suggestion chips respond on tap (press/active state).
+- [x] All animations are disabled or reduced under `prefers-reduced-motion`, and nothing depends on animation timing to function.
