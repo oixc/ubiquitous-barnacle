@@ -75,6 +75,10 @@ let syncEnabled = true;
 
 function renderSyncControls(dailyCount, enabled) {
   syncEnabled = enabled;
+  const versionEl = document.getElementById("drawer-version");
+  if (versionEl && globalThis.APP_VERSION) {
+    versionEl.textContent = `Version ${globalThis.APP_VERSION}`;
+  }
   const countEl = document.getElementById("drawer-sync-count");
   if (countEl) {
     countEl.textContent = syncEnabled

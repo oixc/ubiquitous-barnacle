@@ -27,10 +27,11 @@ build migration mechanisms.
 - Undo is off by default (`ENABLE_UNDO` near the top of `js/main.js`, `false`).
   Set it to `false` to test the event store without Undo classification — every
   re-add then records a plain add event.
-- Service worker is cache-first with hardcoded `CACHE_NAME = "grocery-v18"` in `sw.js`.
-  Bump the version AND add any new `js/*.js` file to `ASSETS` when shipping changes,
-  or installed clients keep stale assets. ntfy.sh requests deliberately bypass the
-  cache.
+- Service worker is cache-first with `CACHE_NAME` derived from `js/version.js`
+  (single source of truth — the same value shows in the drawer footer). Bump
+  `APP_VERSION` in `js/version.js` AND add any new `js/*.js` file to `ASSETS`
+  in `sw.js` when shipping changes, or installed clients keep stale assets.
+  ntfy.sh requests deliberately bypass the cache.
 - Sync protocol: ntfy.sh topic == List name (from `#list=` URL hash, else
   localStorage `pwa_grocery_list`, else generated). Actions: `PUT_ITEM`,
   `DELETE_ITEM`, `PUT_PRODUCT`, `DELETE_PRODUCT`, `CLEAR_BOUGHT`,

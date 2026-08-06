@@ -1,4 +1,6 @@
-const CACHE_NAME = "grocery-v27";
+importScripts("./js/version.js");
+
+const CACHE_NAME = "grocery-" + self.APP_VERSION;
 const ASSETS = [
   "./index.html",
   "./manifest.json",
@@ -8,6 +10,7 @@ const ASSETS = [
   "./js/catalog.js",
   "./js/backup.js",
   "./js/ui.js",
+  "./js/version.js",
   "https://cdn.tailwindcss.com",
 ];
 
