@@ -10,7 +10,7 @@ Detail/Preset chips so one tap adds Product + Detail.
 
 **Status:** ready-for-agent
 
-- [ ] Typing filters chips by prefix (default spelling + aliases); the strip is no longer hidden while typing.
-- [ ] A tap on a filtered chip adds the Item.
-- [ ] Selecting a match surfaces its Detail/Preset chips for one-tap Product + Detail adds.
-- [ ] The no-match state degrades gracefully (silent no-op or clean empty).
+- [x] Typing filters chips by prefix (default spelling + aliases); the strip is no longer hidden while typing.
+- [x] A tap on a filtered chip adds the Item.
+- [x] Selecting a match surfaces its Detail/Preset chips for one-tap Product + Detail adds.
+- [x] The no-match state degrades gracefully (silent no-op or clean empty).

@@ -96,26 +96,38 @@ function renderSyncControls(dailyCount, enabled) {
   }
 }
 
-function syncSuggestionsVisibility() {
-  const el = document.getElementById("suggestions");
-  if (!el) return;
-  const input = document.getElementById("item-input");
-  const typing = input && input.value.trim().length > 0;
-  el.classList.toggle("hidden", typing);
+let currentSuggestions = [];
+
+function normalizePrefix(str) {
+  return String(str).toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function renderSuggestions(suggestions) {
+// Live filter: while the add input is non-empty, show only chips whose Product
+// spelling or aliases start with the typed text; otherwise the full strip.
+function suggestionsFilter() {
+  const input = document.getElementById("item-input");
+  const prefix = input ? normalizePrefix(input.value) : "";
+  if (!prefix) return currentSuggestions;
+  return currentSuggestions.filter((s) => {
+    const product = s && s.product;
+    if (!product) return false;
+    const spellings = [product.defaultSpelling, ...(product.aliases || [])];
+    return spellings.some((sp) => normalizePrefix(sp).startsWith(prefix));
+  });
+}
+
+function renderSuggestionStrip() {
   const el = document.getElementById("suggestions");
   if (!el) return;
-  syncSuggestionsVisibility();
-  if (!suggestions || suggestions.length === 0) {
+  const visible = suggestionsFilter();
+  if (visible.length === 0) {
     el.innerHTML = "";
     return;
   }
   el.innerHTML = `
     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Buy again</div>
     <div class="flex flex-wrap gap-2">
-      ${suggestions
+      ${visible
         .map(
           (s) => `
         <button data-action="add-suggested" data-id="${s.product.id}" title="Bought ${s.count}×" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/40 text-xs text-amber-200 hover:bg-amber-900/40 transition">
@@ -126,6 +138,11 @@ function renderSuggestions(suggestions) {
         .join("")}
     </div>
   `;
+}
+
+function renderSuggestions(suggestions) {
+  currentSuggestions = suggestions || [];
+  renderSuggestionStrip();
 }
 
 function showSection(view) {
@@ -311,6 +328,7 @@ function startRename(productId) {
   const input = document.createElement("input");
   input.type = "text";
   input.value = product.defaultSpelling;
+  input.autocomplete = "off";
   input.className =
     "w-full px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600";
 
@@ -350,6 +368,7 @@ function startDetailEdit(itemId) {
   input.type = "text";
   input.value = item.detail || "";
   input.placeholder = "e.g. 500 g";
+  input.autocomplete = "off";
   input.className =
     "w-28 px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600";
 
@@ -509,13 +528,13 @@ function bindEvents() {
     if (!text) return;
     itemInput.value = "";
     clearPresetChips();
-    syncSuggestionsVisibility();
+    renderSuggestionStrip();
     actions.addItem(text);
   });
 
   itemInput.addEventListener("input", (e) => {
     clearTimeout(detailTimer);
-    syncSuggestionsVisibility();
+    renderSuggestionStrip();
     const value = e.target.value.trim();
     if (!value) {
       clearPresetChips();
@@ -551,7 +570,7 @@ function bindEvents() {
     else if (action === "add-with-detail") {
       itemInput.value = "";
       clearPresetChips();
-      syncSuggestionsVisibility();
+      renderSuggestionStrip();
       actions.addItemWithDetail(el.dataset.id, el.dataset.detail);
     } else if (action === "open-menu") openMenu();
     else if (action === "close-menu") closeMenu();
