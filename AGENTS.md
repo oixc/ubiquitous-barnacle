@@ -9,6 +9,11 @@ Item revive), `ui.js` (rendering + delegated events; never touches DB or network
 directly). `sw.js` is the service worker, `manifest.json` the PWA manifest. No
 build step, no npm, no tests — keep it that way.
 
+## Status
+Early development — no deployed users, no backwards-compatibility guarantees.
+Breaking changes (schema, protocol, storage, UI) are expected and welcome; don't
+build migration mechanisms.
+
 ## Run & verify
 - Serve statically, e.g. `pixi run test-server` — service worker and
   IndexedDB don't work from `file://`.
@@ -48,7 +53,8 @@ build step, no npm, no tests — keep it that way.
   Caveat: restoring into an empty DB before the first Sync connection suppresses
   the automatic fresh-join catch-up pull, so hit the drawer's Refresh afterwards
   to still fetch live Items/Products from Peers.
-- IndexedDB is `GroceryDB` v3: `items`, `products`, and `purchaseHistory` stores,
+- IndexedDB is `GroceryDB` v3 (version bumps freely in early development): `items`,
+  `products`, and `purchaseHistory` stores,
   each with a `byList` index. Item/Product IDs are prefixed with the List name
   (`${listName}::…`) so one DB can hold several Lists without cross-talk; on List
   switch, reads are scoped by `listName` and nothing carries over.
