@@ -53,10 +53,11 @@ function showView(view) {
 }
 
 async function renderAll() {
-  const [items, products, history] = await Promise.all([
+  const [items, products, history, listActivity] = await Promise.all([
     db.getAll("items", listName),
     db.getAll("products", listName),
     db.getAll("events", listName),
+    db.getListActivity(),
   ]);
   const { suggestions, expiresAt } = catalog.computeSuggestions({
     products,
@@ -71,6 +72,7 @@ async function renderAll() {
     suggestions,
     tripPositions,
     listName,
+    listActivity,
     view: currentView,
     dailyCount: sync.getDailyCount(),
     syncEnabled: sync.isSyncEnabled(),
@@ -240,6 +242,7 @@ const actions = {
     if (item && product) await catalog.setItemDetail(item, product, detail);
   },
   changeList,
+  switchList,
   copyInviteLink,
   refresh: () => sync.publishAction({ type: "REQUEST_SYNC", ts: Date.now() }),
   exportBackup: async () => {

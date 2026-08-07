@@ -58,6 +58,7 @@ export function renderAll({
   suggestions,
   tripPositions,
   listName,
+  listActivity,
   view,
   dailyCount,
   syncEnabled,
@@ -70,6 +71,7 @@ export function renderAll({
   renderList({ items, products, listName, tripPositions });
   renderCatalog(products, history);
   renderHistory(history, products);
+  renderRecentLists(listActivity, listName);
   renderSyncControls(dailyCount, syncEnabled);
 }
 
@@ -101,6 +103,38 @@ function renderSyncControls(dailyCount, enabled) {
       "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 transition";
     label.textContent = "Off";
   }
+}
+
+// Lists this device has data for (newest activity first), excluding the List
+// currently open. Hidden entirely when there's nothing to switch to.
+function renderRecentLists(listActivity, currentList) {
+  const container = document.getElementById("recent-lists");
+  const section = document.getElementById("recent-lists-section");
+  if (!container || !section) return;
+  const others = (listActivity || []).filter(
+    (entry) => entry.name !== currentList,
+  );
+  section.classList.toggle("hidden", others.length === 0);
+  container.innerHTML = others
+    .map((entry) => {
+      const products = `${entry.productCount || 0} ${
+        entry.productCount === 1 ? "product" : "products"
+      }`;
+      const meta = entry.lastAt ? `${products} · ${formatRelative(entry.lastAt)}` : products;
+      return `
+        <button
+          data-action="switch-list"
+          data-list="${escapeHtml(entry.name)}"
+          title="${escapeHtml(entry.name)}"
+          class="flex items-center gap-2 w-full px-3 py-1.5 rounded-lg hover:bg-slate-800 hover:text-white transition text-left"
+        >
+          <span class="min-w-0">
+            <span class="block text-sm font-mono text-slate-300 truncate">${escapeHtml(entry.name)}</span>
+            <span class="block text-xs text-slate-500">${escapeHtml(meta)}</span>
+          </span>
+        </button>`;
+    })
+    .join("");
 }
 
 let currentSuggestions = [];
@@ -670,6 +704,7 @@ function bindEvents() {
     const action = el.dataset.action;
     if (action === "copy-link") actions.copyInviteLink();
     else if (action === "change-list") actions.changeList();
+    else if (action === "switch-list") actions.switchList(el.dataset.list);
     else if (action === "refresh") actions.refresh();
     else if (action === "export-backup") actions.exportBackup();
     else if (action === "import-backup") {

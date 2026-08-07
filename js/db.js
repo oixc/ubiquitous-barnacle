@@ -36,6 +36,71 @@ export function getAll(store, listName) {
   });
 }
 
+// Every List this device has data for, most recently active first.
+// Membership: distinct `list` keys across the byList indexes of all three
+// stores. Recency: the max events.at per List (adds and purchases both record
+// an event, so max `at` is the last time the List was touched). Lists with
+// events only, e.g. ones with a check-off but no stored item, are covered by
+// the events store scan.
+export function getListActivity() {
+  const stores = ["items", "products", "events"];
+  const listNames = new Set();
+  const lastAt = new Map();
+  const productCount = new Map();
+  const tx = db.transaction(stores, "readonly");
+  return new Promise((resolve, reject) => {
+    for (const storeName of stores) {
+      const req = tx
+        .objectStore(storeName)
+        .index("byList")
+        .openKeyCursor(null, "nextunique");
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (cursor) {
+          listNames.add(cursor.key);
+          cursor.continue();
+        }
+      };
+      req.onerror = () => reject(req.error);
+    }
+    const productsReq = tx.objectStore("products").openCursor();
+    productsReq.onsuccess = () => {
+      const cursor = productsReq.result;
+      if (cursor) {
+        const list = cursor.value && cursor.value.list;
+        if (list != null) productCount.set(list, (productCount.get(list) || 0) + 1);
+        cursor.continue();
+      }
+    };
+    productsReq.onerror = () => reject(productsReq.error);
+    const eventsReq = tx.objectStore("events").openCursor();
+    eventsReq.onsuccess = () => {
+      const cursor = eventsReq.result;
+      if (cursor) {
+        const record = cursor.value;
+        if (record && record.list != null && typeof record.at === "number") {
+          const prev = lastAt.get(record.list);
+          if (prev == null || record.at > prev) lastAt.set(record.list, record.at);
+        }
+        cursor.continue();
+      }
+    };
+    eventsReq.onerror = () => reject(eventsReq.error);
+    tx.oncomplete = () => {
+      resolve(
+        [...listNames]
+          .map((name) => ({
+            name,
+            lastAt: lastAt.get(name) || 0,
+            productCount: productCount.get(name) || 0,
+          }))
+          .sort((a, b) => b.lastAt - a.lastAt || a.name.localeCompare(b.name)),
+      );
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 function write(store, op) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, "readwrite");
