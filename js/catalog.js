@@ -36,7 +36,7 @@ function canonicalizeDetail(product, detail) {
   const value = (detail || "").trim();
   if (!value) return "";
   const normalized = normalizeDetail(value);
-  const existing = (product.presets || []).find(
+  const existing = product.presets.find(
     (p) => normalizeDetail(p) === normalized,
   );
   return existing || value;
@@ -46,7 +46,7 @@ function canonicalizeDetail(product, detail) {
 function ensurePreset(product, detail) {
   const canonical = canonicalizeDetail(product, detail);
   if (!canonical) return;
-  const presets = product.presets || (product.presets = []);
+  const presets = product.presets;
   if (presets.some((p) => p === canonical)) return;
   presets.push(canonical);
   if (presets.length > PRESET_CAP) presets.splice(0, presets.length - PRESET_CAP);
