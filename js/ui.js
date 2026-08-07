@@ -12,7 +12,6 @@ let rerender = () => {};
 const ICONS = {
   plus: 'M12 4v16m8-8H4',
   copy: 'M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z',
-  list: 'M4 6h16M4 12h16M4 18h16',
   menu: 'M4 6h16M4 12h16M4 18h16',
   close: 'M6 18L18 6M6 6l12 12',
   cart: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z',
@@ -148,7 +147,7 @@ function suggestionsFilter() {
   return currentSuggestions.filter((s) => {
     const product = s && s.product;
     if (!product) return false;
-    const spellings = [product.defaultSpelling, ...(product.aliases || [])];
+    const spellings = [product.defaultSpelling, ...product.aliases];
     return spellings.some((sp) => normalizeText(sp).startsWith(prefix));
   });
 }
@@ -357,7 +356,6 @@ let prevItemIds = new Set();
 let listInitialized = false;
 
 export function renderList({ items, products, listName, tripPositions }) {
-  setListName(listName);
   const productById = new Map(products.map((p) => [p.id, p]));
   const listEl = document.getElementById("grocery-list");
 
@@ -509,7 +507,7 @@ function renderPresetChips(product) {
   const el = document.getElementById("preset-chips");
   if (!el) return;
   const presets =
-    product && product.presets && product.presets.length
+    product && product.presets.length
       ? product.presets
       : [];
   if (presets.length === 0) {
@@ -581,8 +579,8 @@ function renderCatalog(products, history) {
       <div class="flex items-center justify-between p-3.5 bg-slate-900 rounded-xl border border-slate-800 shadow-sm transition" data-product-id="${p.id}">
         <div class="min-w-0">
           <div class="text-sm font-medium text-slate-200" data-role="product-name">${escapeHtml(p.defaultSpelling)}</div>
-          ${p.aliases && p.aliases.length ? `<div class="mt-1 flex flex-wrap gap-1">${p.aliases.map((a) => `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">${escapeHtml(a)}</span>`).join("")}</div>` : ""}
-          ${p.presets && p.presets.length ? `<div class="mt-1 flex flex-wrap gap-1">${p.presets.map((d) => `
+          ${p.aliases.length ? `<div class="mt-1 flex flex-wrap gap-1">${p.aliases.map((a) => `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">${escapeHtml(a)}</span>`).join("")}</div>` : ""}
+          ${p.presets.length ? `<div class="mt-1 flex flex-wrap gap-1">${p.presets.map((d) => `
             <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
               ${escapeHtml(d)}
               <button data-action="delete-preset" data-id="${p.id}" data-detail="${escapeHtml(d)}" aria-label="Remove preset" title="Remove preset" class="text-slate-500 hover:text-rose-400 leading-none">×</button>
@@ -698,35 +696,43 @@ function bindEvents() {
     }, 200);
   });
 
-  document.addEventListener("click", (e) => {
-    const el = e.target.closest("[data-action]");
-    if (!el) return;
-    const action = el.dataset.action;
-    if (action === "copy-link") actions.copyInviteLink();
-    else if (action === "change-list") actions.changeList();
-    else if (action === "switch-list") actions.switchList(el.dataset.list);
-    else if (action === "refresh") actions.refresh();
-    else if (action === "export-backup") actions.exportBackup();
-    else if (action === "import-backup") {
+  const handlers = {
+    "copy-link": () => actions.copyInviteLink(),
+    "change-list": () => actions.changeList(),
+    "switch-list": (el) => actions.switchList(el.dataset.list),
+    "refresh": () => actions.refresh(),
+    "export-backup": () => actions.exportBackup(),
+    "import-backup": () => {
       const input = document.getElementById("backup-file-input");
       if (input) input.click();
-    } else if (action === "toggle-sync") actions.setSyncEnabled(!syncEnabled);
-    else if (action === "remove-item") actions.removeItem(el.dataset.id);
-    else if (action === "check-off") checkOffItem(el);
-    else if (action === "rename-product") startRename(el.dataset.id);
-    else if (action === "delete-product") actions.deleteProduct(el.dataset.id);
-    else if (action === "delete-preset")
-      actions.deletePreset(el.dataset.id, el.dataset.detail);
-    else if (action === "add-suggested") actions.suggest(el.dataset.id);
-    else if (action === "edit-detail") startDetailEdit(el.dataset.id);
-    else if (action === "add-with-detail") {
+    },
+    "toggle-sync": () => actions.setSyncEnabled(!syncEnabled),
+    "remove-item": (el) => actions.removeItem(el.dataset.id),
+    "check-off": (el) => checkOffItem(el),
+    "rename-product": (el) => startRename(el.dataset.id),
+    "delete-product": (el) => actions.deleteProduct(el.dataset.id),
+    "delete-preset": (el) => actions.deletePreset(el.dataset.id, el.dataset.detail),
+    "add-suggested": (el) => actions.suggest(el.dataset.id),
+    "edit-detail": (el) => startDetailEdit(el.dataset.id),
+    "add-with-detail": (el) => {
       itemInput.value = "";
       clearPresetChips();
       renderSuggestionStrip();
       actions.addItemWithDetail(el.dataset.id, el.dataset.detail);
-    } else if (action === "open-menu") openMenu();
-    else if (action === "close-menu") closeMenu();
-    else if (action.startsWith("view-")) showView(el.dataset.view);
+    },
+    "open-menu": () => openMenu(),
+    "close-menu": () => closeMenu(),
+  };
+
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest("[data-action]");
+    if (!el) return;
+    const action = el.dataset.action;
+    if (handlers[action]) {
+      handlers[action](el);
+    } else if (action.startsWith("view-")) {
+      showView(el.dataset.view);
+    }
   });
 
   const backupInput = document.getElementById("backup-file-input");
