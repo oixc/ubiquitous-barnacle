@@ -101,6 +101,17 @@ export function getListActivity() {
   });
 }
 
+// Single-record lookup by primary key. IDs are list-prefixed, so this is
+// unambiguous across Lists. Returns null when not found.
+export function getById(store, id) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, "readonly");
+    const req = tx.objectStore(store).get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 function write(store, op) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, "readwrite");
