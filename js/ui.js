@@ -199,14 +199,15 @@ const SUGGESTION_STYLES = {
 
 function suggestionChip(s) {
   const p = s.product;
-  let title;
-  if (s.kind === "pivot") {
-    title = `Added together ${s.count}×`;
-  } else if (s.kind === "fresh") {
-    title = `Bought ${formatRelative(s.at)}`;
-  } else {
-    title = `Restock ${formatInterval(s.interval)} · due ${formatRelative(s.dueAt)}`;
-  }
+  const reasonText = {
+    pivot: (r) => `Added together ${r.count}×`,
+    fresh: (r) => `Bought ${formatRelative(r.at)}`,
+    restock: (r) =>
+      `Restock ${formatInterval(r.interval)} · due ${formatRelative(r.dueAt)}`,
+  };
+  const title = (s.reasons || [])
+    .map((r) => reasonText[r.kind](r))
+    .join("\n");
   const style = SUGGESTION_STYLES[s.kind] || SUGGESTION_STYLES.restock;
   return `
     <button data-action="add-suggested" data-id="${p.id}" title="${escapeHtml(title)}" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg text-xs ${style.chip} transition active:scale-95 motion-reduce:transition-none motion-reduce:transform-none">

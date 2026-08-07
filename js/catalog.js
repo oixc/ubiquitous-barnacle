@@ -237,6 +237,15 @@ const MIN_COOCCUR_SESSIONS = 3;
 const PIVOT_WINDOW_MS = 2 * 60 * 1000;
 const TRIP_WINDOW_MS = 60 * 60 * 1000;
 
+// Score fusion (02) — tuning knobs. Each signal normalizes to 0..1 and mixes
+// into one flat weighted score; the weights are constant (no context gate, the
+// pivot is naturally 0 outside its window because no companions exist then).
+// PIVOT_SATURATION is the companion count at which the pivot term saturates.
+const PIVOT_WEIGHT = 1.0;
+const FRESH_WEIGHT = 0.7;
+const RESTOCK_WEIGHT = 0.6;
+const PIVOT_SATURATION = 6;
+
 // Median of an array of values (mean of the two central values on an even
 // count); null for an empty array.
 function median(values) {
@@ -411,20 +420,37 @@ function latestEvent(events, match) {
   return latest;
 }
 
-// Context-aware suggestions (09 + 11). Three regimes, highest priority first:
+// Gets a product's signal row, creating it with the Product when first touched.
+function signalRow(signals, product) {
+  let row = signals.get(product.id);
+  if (!row) {
+    row = { product };
+    signals.set(product.id, row);
+  }
+  return row;
+}
+
+// Score-fused suggestions (09 + 11 + 02). Signals normalize to 0..1 and mix
+// into one flat weighted score — no hard tiers, no context gate. Per product:
 //   pivot   — the current adding session's on-List Items surface the union of
 //             their added-together companions (09), each once, averaged per
-//             companion; derived from add events so local and remote adds both
-//             pivot, while an Undo re-add (which records no event) never does.
-//             The pivot lives while the latest add is inside the pivot window
-//             and at least one session Item stays on the List.
-//   fresh   — check-offs within the trip window top the strip, newest first (11).
-//   restock — restock-due Products (05) fill the rest and dominate when there
-//             are no fresh check-offs or pivot companions.
-// With no data each regime is empty and the ranking falls through to the next —
-// a silent no-op. Co-occurrence counting only runs while a pivot is active.
+//             companion (raw = count c, normalized min(1, c/6)); derived from
+//             add events so local and remote adds both pivot, while an Undo
+//             re-add (which records no event) never does. Lives while the
+//             latest add is inside the pivot window and at least one session
+//             Item stays on the List; otherwise the term is naturally 0.
+//   fresh   — check-offs within the trip window, newest per product (11),
+//             normalized 1 − age/60min.
+//   restock — restock-due Products (05), due only, normalized
+//             min(1, overdue/interval).
+// score = PIVOT_WEIGHT·pivot + FRESH_WEIGHT·fresh + RESTOCK_WEIGHT·restock.
+// fresh∩restock is structurally near-impossible (a fresh chip was bought ≤60
+// min ago, which can't exceed a restock interval except sub-hour Products), so
+// real fusion pairs are pivot×restock and pivot×fresh. kind = the dominant
+// (highest-weighted) signal for the chip colour; reasons lists every fired
+// signal. Co-occurrence counting only runs while a pivot is active.
 // Returns { suggestions, expiresAt }: `expiresAt` is the soonest moment a
-// visible regime lapses (so the caller can re-render), or null when the strip
+// visible signal lapses (so the caller can re-render), or null when the strip
 // is static.
 export function computeSuggestions({ products, items, events }) {
   const history = events || [];
@@ -432,7 +458,7 @@ export function computeSuggestions({ products, items, events }) {
   const productById = new Map(products.map((p) => [p.id, p]));
   const now = Date.now();
 
-  const ranked = [];
+  const signals = new Map(); // productId -> { product, pivot, freshAt, restockInterval, restockDueAt }
   let expiresAt = null;
 
   const adds = history.filter((e) => e.kind === "add");
@@ -441,14 +467,13 @@ export function computeSuggestions({ products, items, events }) {
     const sessions = segmentEvents(adds, SESSION_GAP_MS);
     const session = sessions.find((burst) => burst.includes(latestAdd));
     if (session.some((e) => onList.has(e.productId))) {
-      const companions = sessionPivotCompanions(
+      for (const c of sessionPivotCompanions(
         session,
         onList,
         productById,
         sessions,
-      );
-      for (const c of companions) {
-        ranked.push({ product: c.product, kind: "pivot", count: c.count });
+      )) {
+        signalRow(signals, c.product).pivot = c.count;
       }
       expiresAt = latestAdd.at + PIVOT_WINDOW_MS;
     }
@@ -457,43 +482,96 @@ export function computeSuggestions({ products, items, events }) {
   const fresh = history
     .filter((e) => e.kind === "purchase" && now - e.at <= TRIP_WINDOW_MS)
     .sort((a, b) => b.at - a.at);
-  const freshByProduct = new Map();
   for (const e of fresh) {
-    if (onList.has(e.productId) || freshByProduct.has(e.productId)) continue;
-    freshByProduct.set(e.productId, e);
-  }
-  for (const e of freshByProduct.values()) {
+    if (onList.has(e.productId)) continue;
     const product = productById.get(e.productId);
     if (!product) continue;
-    ranked.push({ product, kind: "fresh", at: e.at });
-    const freshEnd = e.at + TRIP_WINDOW_MS;
-    if (!expiresAt || freshEnd < expiresAt) expiresAt = freshEnd;
+    const row = signalRow(signals, product);
+    if (row.freshAt == null) {
+      row.freshAt = e.at; // newest first — first write wins
+      const freshEnd = e.at + TRIP_WINDOW_MS;
+      if (!expiresAt || freshEnd < expiresAt) expiresAt = freshEnd;
+    }
   }
 
-  const restock = products
-    .filter((p) => {
-      if (onList.has(p.id)) return false;
-      if (!p.restockInterval || p.lastPurchase == null) return false;
-      return now - p.lastPurchase >= p.restockInterval;
-    })
-    .map((p) => ({
-      product: p,
-      kind: "restock",
-      interval: p.restockInterval,
-      dueAt: p.lastPurchase + p.restockInterval,
-    }))
-    .sort((a, b) => a.dueAt - b.dueAt || a.interval - b.interval);
-
-  // Dedupe across regimes (first occurrence wins — higher priority), cap total.
-  const seen = new Set();
-  const result = [];
-  for (const s of [...ranked, ...restock]) {
-    if (seen.has(s.product.id)) continue;
-    seen.add(s.product.id);
-    result.push(s);
-    if (result.length >= MAX_SUGGESTIONS) break;
+  for (const p of products) {
+    if (onList.has(p.id)) continue;
+    if (!p.restockInterval || p.lastPurchase == null) continue;
+    if (now - p.lastPurchase < p.restockInterval) continue; // not yet due
+    const row = signalRow(signals, p);
+    row.restockInterval = p.restockInterval;
+    row.restockDueAt = p.lastPurchase + p.restockInterval;
   }
-  return { suggestions: result, expiresAt };
+
+  const normalized = (row) => ({
+    pivot: row.pivot == null ? 0 : Math.min(1, row.pivot / PIVOT_SATURATION),
+    fresh:
+      row.freshAt == null
+        ? 0
+        : Math.max(0, 1 - (now - row.freshAt) / TRIP_WINDOW_MS),
+    restock:
+      row.restockDueAt == null
+        ? 0
+        : Math.min(1, (now - row.restockDueAt) / row.restockInterval),
+  });
+
+  const reasonsFor = (row) => {
+    const reasons = [];
+    if (row.pivot != null) reasons.push({ kind: "pivot", count: row.pivot });
+    if (row.freshAt != null) reasons.push({ kind: "fresh", at: row.freshAt });
+    if (row.restockDueAt != null) {
+      reasons.push({
+        kind: "restock",
+        interval: row.restockInterval,
+        dueAt: row.restockDueAt,
+      });
+    }
+    return reasons;
+  };
+
+  // The dominant signal is the highest weight·normalized; exact ties resolve
+  // to the higher-priority kind (pivot > fresh > restock). An all-zero row
+  // (e.g. a fresh chip at the exact expiry boundary) keeps the restock
+  // fallback, matching ui.js.
+  const built = [];
+  for (const row of signals.values()) {
+    const n = normalized(row);
+    const weighted = {
+      pivot: n.pivot * PIVOT_WEIGHT,
+      fresh: n.fresh * FRESH_WEIGHT,
+      restock: n.restock * RESTOCK_WEIGHT,
+    };
+    const reasons = reasonsFor(row);
+    const best = Math.max(weighted.pivot, weighted.fresh, weighted.restock);
+    let kind = "restock";
+    if (best > 0) {
+      if (weighted.pivot === best) kind = "pivot";
+      else if (weighted.fresh === best) kind = "fresh";
+    }
+    built.push({
+      suggestion: {
+        product: row.product,
+        kind,
+        score: weighted.pivot + weighted.fresh + weighted.restock,
+        reasons,
+      },
+      strongest: best,
+    });
+  }
+
+  built.sort(
+    (a, b) =>
+      b.suggestion.score - a.suggestion.score ||
+      b.suggestion.reasons.length - a.suggestion.reasons.length ||
+      b.strongest - a.strongest ||
+      a.suggestion.product.defaultSpelling.localeCompare(
+        b.suggestion.product.defaultSpelling,
+      ),
+  );
+  return {
+    suggestions: built.map((b) => b.suggestion).slice(0, MAX_SUGGESTIONS),
+    expiresAt,
+  };
 }
 
 // Undo classification (ADR-0008): re-adding a Product whose most recent purchase

@@ -92,10 +92,12 @@ A suggestion to re-add a Product that is due for restock — its restock interva
 not raw-frequency-based.
 
 **Suggestion**:
-A one-tap chip in the List's single suggestions strip that adds an Item. The
-strip reorders itself by context — fresh check-offs during a trip, restock
-prompts later, added-together companions while adding — and filters down as the
-user types.
+A one-tap chip in the List's single suggestions strip that adds an Item. Each
+signal — added-together companions, fresh check-offs, restock prompts —
+normalizes to a 0..1 strength and mixes into one flat weighted score, so a
+Product can be suggested for several reasons at once; the chip's tooltip lists
+every reason that fired, its colour reflects the dominant one, and the strip
+filters down as the user types.
 _Avoid_: recommendation, buy-again
 
 **Added-together**:
