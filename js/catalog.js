@@ -276,11 +276,10 @@ function medianGap(times) {
 // only when a purchase is recorded, never per render.
 export async function refreshProductRestock(productId) {
   const listName = getListName();
-  const [events, products] = await Promise.all([
+  const [events, product] = await Promise.all([
     db.getAll("events", listName),
-    db.getAll("products", listName),
+    db.getById("products", productId),
   ]);
-  const product = products.find((p) => p.id === productId);
   if (!product) return;
   const purchases = events
     .filter((e) => e.kind === "purchase" && e.productId === productId)
