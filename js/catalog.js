@@ -432,24 +432,7 @@ function signalRow(signals, product) {
 }
 
 // Score-fused suggestions (09 + 11 + 02). Signals normalize to 0..1 and mix
-// into one flat weighted score — no hard tiers, no context gate. Per product:
-//   pivot   — the current adding session's on-List Items surface the union of
-//             their added-together companions (09), each once, averaged per
-//             companion (raw = count c, normalized min(1, c/6)); derived from
-//             add events so local and remote adds both pivot, while an Undo
-//             re-add (which records no event) never does. Lives while the
-//             latest add is inside the pivot window and at least one session
-//             Item stays on the List; otherwise the term is naturally 0.
-//   fresh   — check-offs within the trip window, newest per product (11),
-//             normalized 1 − age/60min.
-//   restock — restock-due Products (05), due only, normalized
-//             min(1, overdue/interval).
-// score = PIVOT_WEIGHT·pivot + FRESH_WEIGHT·fresh + RESTOCK_WEIGHT·restock.
-// fresh∩restock is structurally near-impossible (a fresh chip was bought ≤60
-// min ago, which can't exceed a restock interval except sub-hour Products), so
-// real fusion pairs are pivot×restock and pivot×fresh. kind = the dominant
-// (highest-weighted) signal for the chip colour; reasons lists every fired
-// signal. Co-occurrence counting only runs while a pivot is active.
+// into one flat weighted score — no hard tiers, no context gate.
 // Returns { suggestions, expiresAt }: `expiresAt` is the soonest moment a
 // visible signal lapses (so the caller can re-render), or null when the strip
 // is static.
@@ -459,27 +442,39 @@ export function computeSuggestions({ products, items, events }) {
   const productById = new Map(products.map((p) => [p.id, p]));
   const now = Date.now();
 
-  const signals = new Map(); // productId -> { product, pivot, freshAt, restockInterval, restockDueAt }
+  const signals = new Map();
   let expiresAt = null;
 
-  const adds = history.filter((e) => e.kind === "add");
-  const latestAdd = latestEvent(adds);
-  if (latestAdd && now - latestAdd.at <= PIVOT_WINDOW_MS) {
-    const sessions = segmentEvents(adds, SESSION_GAP_MS);
-    const session = sessions.find((burst) => burst.includes(latestAdd));
-    if (session.some((e) => onList.has(e.productId))) {
-      for (const c of sessionPivotCompanions(
-        session,
-        onList,
-        productById,
-        sessions,
-      )) {
-        signalRow(signals, c.product).pivot = c.count;
-      }
-      expiresAt = latestAdd.at + PIVOT_WINDOW_MS;
-    }
+  const pivotExpiry = gatherPivotSignals(signals, history, onList, productById, now);
+  if (pivotExpiry != null) expiresAt = pivotExpiry;
+
+  const freshExpiry = gatherFreshSignals(signals, history, onList, productById, now);
+  if (freshExpiry != null && (expiresAt == null || freshExpiry < expiresAt)) {
+    expiresAt = freshExpiry;
   }
 
+  gatherRestockSignals(signals, products, onList, now);
+
+  return { suggestions: rankSuggestions(signals, now), expiresAt };
+}
+
+// Pivot companions: co-occurring Products in the current adding session.
+function gatherPivotSignals(signals, history, onList, productById, now) {
+  const adds = history.filter((e) => e.kind === "add");
+  const latestAdd = latestEvent(adds);
+  if (!latestAdd || now - latestAdd.at > PIVOT_WINDOW_MS) return null;
+  const sessions = segmentEvents(adds, SESSION_GAP_MS);
+  const session = sessions.find((burst) => burst.includes(latestAdd));
+  if (!session.some((e) => onList.has(e.productId))) return null;
+  for (const c of sessionPivotCompanions(session, onList, productById, sessions)) {
+    signalRow(signals, c.product).pivot = c.count;
+  }
+  return latestAdd.at + PIVOT_WINDOW_MS;
+}
+
+// Fresh check-offs: recent purchases within the trip window.
+function gatherFreshSignals(signals, history, onList, productById, now) {
+  let expiresAt = null;
   const fresh = history
     .filter((e) => e.kind === "purchase" && now - e.at <= TRIP_WINDOW_MS)
     .sort((a, b) => b.at - a.at);
@@ -489,21 +484,28 @@ export function computeSuggestions({ products, items, events }) {
     if (!product) continue;
     const row = signalRow(signals, product);
     if (row.freshAt == null) {
-      row.freshAt = e.at; // newest first — first write wins
+      row.freshAt = e.at;
       const freshEnd = e.at + TRIP_WINDOW_MS;
       if (!expiresAt || freshEnd < expiresAt) expiresAt = freshEnd;
     }
   }
+  return expiresAt;
+}
 
+// Restock-due Products.
+function gatherRestockSignals(signals, products, onList, now) {
   for (const p of products) {
     if (onList.has(p.id)) continue;
     if (!p.restockInterval || p.lastPurchase == null) continue;
-    if (now - p.lastPurchase < p.restockInterval) continue; // not yet due
+    if (now - p.lastPurchase < p.restockInterval) continue;
     const row = signalRow(signals, p);
     row.restockInterval = p.restockInterval;
     row.restockDueAt = p.lastPurchase + p.restockInterval;
   }
+}
 
+// Normalize, score, sort, truncate.
+function rankSuggestions(signals, now) {
   const normalized = (row) => ({
     pivot: row.pivot == null ? 0 : Math.min(1, row.pivot / PIVOT_SATURATION),
     fresh:
@@ -530,10 +532,6 @@ export function computeSuggestions({ products, items, events }) {
     return reasons;
   };
 
-  // The dominant signal is the highest weight·normalized; exact ties resolve
-  // to the higher-priority kind (pivot > fresh > restock). An all-zero row
-  // (e.g. a fresh chip at the exact expiry boundary) keeps the restock
-  // fallback, matching ui.js.
   const built = [];
   for (const row of signals.values()) {
     const n = normalized(row);
@@ -569,10 +567,7 @@ export function computeSuggestions({ products, items, events }) {
         b.suggestion.product.defaultSpelling,
       ),
   );
-  return {
-    suggestions: built.map((b) => b.suggestion).slice(0, MAX_SUGGESTIONS),
-    expiresAt,
-  };
+  return built.map((b) => b.suggestion).slice(0, MAX_SUGGESTIONS);
 }
 
 // Undo classification (ADR-0008): re-adding a Product whose most recent purchase
