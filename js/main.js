@@ -1,7 +1,8 @@
 // js/main.js — Bootstrap, app state, and the app action layer.
 // Owns listName/PEER_ID, coordinates db / sync / catalog / ui, and exposes two
-// write faces: `actions` (local mutations — persist + announce) used by ui.js
-// and catalog.js, and `wire` (peer mutations — persist only) used by sync.js.
+// write faces via makeFace(announce): `actions` (local — persist + announce)
+// used by ui.js and catalog.js, and `wire` (peer — persist only) used by
+// sync.js.
 
 import * as db from "./db.js";
 import * as sync from "./sync.js";
@@ -113,12 +114,10 @@ function copyInviteLink() {
 }
 
 // --- Write path (single write path for local UI, remote actions, and catalog) ---
-// One implementation per mutation; the two faces differ only in whether they
-// announce to Peers: `actions` (local) persists + derives + announces + renders,
-// `wire` (remote application) persists + derives + renders but never echoes.
+// One implementation per mutation; makeFace toggles the announce flag.
 async function writeItem(item, product = null, announce = false) {
-  const items = await db.getAll("items", listName);
-  const isNew = !items.some((i) => i.id === item.id);
+  const existing = await db.getById("items", item.id);
+  const isNew = !existing;
   if (product) await db.put("products", product);
   await db.put("items", item);
   if (isNew) {
@@ -160,8 +159,7 @@ async function writeDelete(id, snapshot = null, announce = false) {
   // snapshot: { productId, detail, deletedAt } — the Item data carried by a
   // wire DELETE_ITEM, so a Peer can record the purchase event even for an
   // Item it never stored. deletedAt present only on check-offs.
-  const items = await db.getAll("items", listName);
-  const item = items.find((i) => i.id === id);
+  const item = await db.getById("items", id);
   const productId =
     (snapshot && snapshot.productId) || (item && item.productId);
   const detail = (snapshot && snapshot.detail) || (item && item.detail) || "";
@@ -221,13 +219,26 @@ async function writeDeleteProduct(id, announce = false) {
   renderAll();
 }
 
+// --- Write face factory ---
+// The two faces differ only in whether they announce to Peers: `actions`
+// (local) persists + derives + announces + renders, `wire` (remote)
+// persists + derives + renders but never echoes.
+function makeFace(announce) {
+  return {
+    putItem: (item, product) => writeItem(item, product, announce),
+    putProduct: (product) => writeProduct(product, announce),
+    deleteItem: (id, snapshot) => writeDelete(id, snapshot, announce),
+    deleteProduct: (id) => writeDeleteProduct(id, announce),
+  };
+}
+
 // --- Local face (used by ui.js and catalog.js) ---
 async function getProduct(productId) {
-  const products = await db.getAll("products", listName);
-  return products.find((p) => p.id === productId) || null;
+  return db.getById("products", productId);
 }
 
 const actions = {
+  ...makeFace(true),
   getListName: () => listName,
   addItem: (text) => catalog.addText(text),
   matchProduct: catalog.matchProduct,
@@ -236,8 +247,7 @@ const actions = {
     if (product) await catalog.addItem(product, detail);
   },
   updateItemDetail: async (itemId, detail) => {
-    const items = await db.getAll("items", listName);
-    const item = items.find((i) => i.id === itemId);
+    const item = await db.getById("items", itemId);
     const product = item && (await getProduct(item.productId));
     if (item && product) await catalog.setItemDetail(item, product, detail);
   },
@@ -256,14 +266,10 @@ const actions = {
     sync.setSyncEnabled(value);
     renderAll();
   },
-  putItem: (item, product) => writeItem(item, product, true),
-  putProduct: (product) => writeProduct(product, true),
   // Local-only product write (e.g. restock stats): persisted, never broadcast.
-  // The change rides on the next Item broadcast like other Product edits.
   persistProduct: (product) => writeProduct(product, false),
   checkOff: (id) => writeDelete(id, { deletedAt: Date.now() }, true),
   removeItem: (id) => writeDelete(id, null, true),
-  deleteProduct: (id) => writeDeleteProduct(id, true),
   renameProduct: async (productId, newSpelling) => {
     const product = await getProduct(productId);
     if (!product) return;
@@ -272,7 +278,7 @@ const actions = {
   },
   deletePreset: async (productId, detail) => {
     const product = await getProduct(productId);
-    if (!product || !product.presets) return;
+    if (!product) return;
     product.presets = product.presets.filter((p) => p !== detail);
     await actions.putProduct(product);
   },
@@ -283,12 +289,7 @@ const actions = {
 };
 
 // --- Wire face (used by sync.js): persist + derive, never echo ---
-const wire = {
-  putItem: (item, product) => writeItem(item, product, false),
-  putProduct: (product) => writeProduct(product, false),
-  deleteItem: (id, snapshot) => writeDelete(id, snapshot, false),
-  deleteProduct: (id) => writeDeleteProduct(id, false),
-};
+const wire = makeFace(false);
 
 // --- Wire up modules ---
 sync.configureSync({
