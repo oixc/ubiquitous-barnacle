@@ -53,18 +53,20 @@ function ensurePreset(product, detail) {
 }
 
 function levenshtein(a, b) {
-  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
-  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
+    let curr = [i];
     for (let j = 1; j <= b.length; j++) {
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
-        dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
+      curr[j] = a[i - 1] === b[j - 1]
+        ? prev[j - 1]
+        : 1 + Math.min(prev[j - 1], prev[j], curr[j - 1]);
     }
+    prev = curr;
   }
-  return dp[a.length][b.length];
+  return prev[b.length];
 }
 
 // Splits an input line into a Product part and a Detail part against an
