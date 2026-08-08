@@ -214,15 +214,11 @@ function formatRelative(ts) {
 }
 
 // Chip style per suggestion kind: pivot (added-together companions) is blue,
-// fresh (recent check-off) is emerald, restock (due) is amber.
+// restock (due) is amber.
 const SUGGESTION_STYLES = {
   pivot: {
     chip: "border bg-blue-950/40 border-blue-800/40 text-blue-200 hover:bg-blue-900/40",
     plus: "text-blue-300",
-  },
-  fresh: {
-    chip: "border bg-emerald-950/40 border-emerald-800/40 text-emerald-200 hover:bg-emerald-900/40",
-    plus: "text-emerald-300",
   },
   restock: {
     chip: "border bg-amber-950/40 border-amber-800/40 text-amber-200 hover:bg-amber-900/40",
@@ -234,7 +230,6 @@ function suggestionChip(s) {
   const p = s.product;
   const reasonText = {
     pivot: (r) => `Added together ${r.count}×`,
-    fresh: (r) => `Bought ${formatRelative(r.at)}`,
     restock: (r) =>
       `Restock ${formatInterval(r.interval)} · due ${formatRelative(r.dueAt)}`,
   };

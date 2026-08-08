@@ -1,7 +1,7 @@
 // js/catalog.js — Product resolution, Item creation, and suggestion logic.
 // addText owns the text→Item flow (split, resolve, alias-confirm); restock
 // prompts (ADR-0008), added-together sessions (09), typical purchase order
-// (06), soft-priority ranking (11), and undo classification live here too.
+// (06), and soft-priority ranking (11) live here too.
 // Reads IndexedDB directly; Item/Product writes go through the injected
 // `apply` actions.
 
@@ -227,24 +227,20 @@ export async function setItemDetail(item, product, detail) {
 
 // --- Restock prompts (ADR-0008: interval from purchase gaps) ---
 const MAX_SUGGESTIONS = 20;
-const UNDO_WINDOW_MS = 10 * 60 * 1000;
 
 // --- Added-together (09): co-occurrence over adding sessions ---
 // Adds are segmented into adding sessions (bursts separated by a time gap) and
 // a pair of Products qualifies as added-together only after co-occurring in at
-// least MIN_COOCCUR_SESSIONS sessions (noise guard). The trip window (11) is
-// the span after a check-off during which the Product stays a fresh suggestion.
+// least MIN_COOCCUR_SESSIONS sessions (noise guard).
 const SESSION_GAP_MS = 30 * 60 * 1000;
 const MIN_COOCCUR_SESSIONS = 3;
 const PIVOT_WINDOW_MS = 2 * 60 * 1000;
-const TRIP_WINDOW_MS = 60 * 60 * 1000;
 
 // Score fusion (02) — tuning knobs. Each signal normalizes to 0..1 and mixes
 // into one flat weighted score; the weights are constant (no context gate, the
 // pivot is naturally 0 outside its window because no companions exist then).
 // PIVOT_SATURATION is the companion count at which the pivot term saturates.
 const PIVOT_WEIGHT = 1.0;
-const FRESH_WEIGHT = 0.7;
 const RESTOCK_WEIGHT = 0.6;
 const PIVOT_SATURATION = 6;
 
@@ -448,11 +444,6 @@ export function computeSuggestions({ products, items, events }) {
   const pivotExpiry = gatherPivotSignals(signals, history, onList, productById, now);
   if (pivotExpiry != null) expiresAt = pivotExpiry;
 
-  const freshExpiry = gatherFreshSignals(signals, history, onList, productById, now);
-  if (freshExpiry != null && (expiresAt == null || freshExpiry < expiresAt)) {
-    expiresAt = freshExpiry;
-  }
-
   gatherRestockSignals(signals, products, onList, now);
 
   return { suggestions: rankSuggestions(signals, now), expiresAt };
@@ -472,26 +463,6 @@ function gatherPivotSignals(signals, history, onList, productById, now) {
   return latestAdd.at + PIVOT_WINDOW_MS;
 }
 
-// Fresh check-offs: recent purchases within the trip window.
-function gatherFreshSignals(signals, history, onList, productById, now) {
-  let expiresAt = null;
-  const fresh = history
-    .filter((e) => e.kind === "purchase" && now - e.at <= TRIP_WINDOW_MS)
-    .sort((a, b) => b.at - a.at);
-  for (const e of fresh) {
-    if (onList.has(e.productId)) continue;
-    const product = productById.get(e.productId);
-    if (!product) continue;
-    const row = signalRow(signals, product);
-    if (row.freshAt == null) {
-      row.freshAt = e.at;
-      const freshEnd = e.at + TRIP_WINDOW_MS;
-      if (!expiresAt || freshEnd < expiresAt) expiresAt = freshEnd;
-    }
-  }
-  return expiresAt;
-}
-
 // Restock-due Products.
 function gatherRestockSignals(signals, products, onList, now) {
   for (const p of products) {
@@ -508,10 +479,6 @@ function gatherRestockSignals(signals, products, onList, now) {
 function rankSuggestions(signals, now) {
   const normalized = (row) => ({
     pivot: row.pivot == null ? 0 : Math.min(1, row.pivot / PIVOT_SATURATION),
-    fresh:
-      row.freshAt == null
-        ? 0
-        : Math.max(0, 1 - (now - row.freshAt) / TRIP_WINDOW_MS),
     restock:
       row.restockDueAt == null
         ? 0
@@ -521,7 +488,6 @@ function rankSuggestions(signals, now) {
   const reasonsFor = (row) => {
     const reasons = [];
     if (row.pivot != null) reasons.push({ kind: "pivot", count: row.pivot });
-    if (row.freshAt != null) reasons.push({ kind: "fresh", at: row.freshAt });
     if (row.restockDueAt != null) {
       reasons.push({
         kind: "restock",
@@ -537,21 +503,17 @@ function rankSuggestions(signals, now) {
     const n = normalized(row);
     const weighted = {
       pivot: n.pivot * PIVOT_WEIGHT,
-      fresh: n.fresh * FRESH_WEIGHT,
       restock: n.restock * RESTOCK_WEIGHT,
     };
     const reasons = reasonsFor(row);
-    const best = Math.max(weighted.pivot, weighted.fresh, weighted.restock);
+    const best = Math.max(weighted.pivot, weighted.restock);
     let kind = "restock";
-    if (best > 0) {
-      if (weighted.pivot === best) kind = "pivot";
-      else if (weighted.fresh === best) kind = "fresh";
-    }
+    if (best > 0 && weighted.pivot === best) kind = "pivot";
     built.push({
       suggestion: {
         product: row.product,
         kind,
-        score: weighted.pivot + weighted.fresh + weighted.restock,
+        score: weighted.pivot + weighted.restock,
         reasons,
       },
       strongest: best,
@@ -568,25 +530,4 @@ function rankSuggestions(signals, now) {
       ),
   );
   return built.map((b) => b.suggestion).slice(0, MAX_SUGGESTIONS);
-}
-
-// Undo classification (ADR-0008): re-adding a Product whose most recent purchase
-// event lies inside the 10-minute Undo window cancels that purchase event. The
-// paired add event (matched by the purchase's Item) is kept — "last added" shows
-// the last independent add, and an undo re-add records no event itself, so the
-// timestamp never moves and an on-list Product never reads "never added".
-// Runs in the item-add write path, so local and remote re-adds both cancel; a
-// genuine double-buy undercounts by one by design. Returns true when an Undo
-// happened, so the caller can skip recording a fresh add event for the re-added
-// Item.
-export async function cancelUndoIfFresh(productId) {
-  const listName = getListName();
-  const events = await db.getAll("events", listName);
-  const latest = latestEvent(
-    events,
-    (e) => e.kind === "purchase" && e.productId === productId,
-  );
-  if (!latest || Date.now() - latest.at > UNDO_WINDOW_MS) return false;
-  await db.remove("events", latest.id);
-  return true;
 }

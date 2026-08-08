@@ -17,33 +17,19 @@ the List. Belongs to exactly one List and never moves between Lists.
 _Avoid_: task, entry
 
 **Check off**:
-Buying an Item: tapping it removes it from the List, records a Purchase, and turns
-its Product into a fresh suggestion. Removing an Item with the trash control is a
-deletion, not a check-off — it records no Purchase.
+Buying an Item: tapping it removes it from the List and records a Purchase.
+Removing an Item with the trash control is a deletion, not a check-off — it
+records no Purchase.
 _Avoid_: complete, done, tick
 
 **Purchase**:
 A single check-off recorded in the event history as a purchase event,
-identified by its Product, the time of the check-off, and the Detail. Removed
-from history when the Item is undone within the Undo window.
+identified by its Product, the time of the check-off, and the Detail.
 
 **Add event**:
 The event-history record of an Item being added to the List, timestamped at the
-Item's creation. Identified by its Item. Removed from history when the Item is
-undone within the Undo window; an undo re-add records nothing, so add events are
-strictly independent adds. Basis for restock intervals and added-together
-sessions.
-
-**Undo**:
-Re-adding an Item within the Undo window after its check-off — by typing, an
-alias, or a suggestion chip. Undoing cancels the checked-off Item's purchase
-event and its paired add event, so accidental check-offs do not pollute
-statistics.
-_Avoid_: revive, un-check
-
-**Undo window**:
-The short span (10 minutes) after a check-off during which re-adding the same
-Product counts as an Undo rather than a fresh need.
+Item's creation. Identified by its Item. Basis for restock intervals and
+added-together sessions.
 
 **Catalog**:
 The List's shared vocabulary of Products, belonging to exactly one List and
@@ -81,9 +67,9 @@ _Avoid_: default (singular — clashes with "Default spelling")
 **Event history**:
 The device-local record of adds and purchases, derived from the shared message
 stream: every observed new Item (a `PUT_ITEM`) records an add event and every
-observed check-off records a purchase event, each deduplicated by Item. Undoing
-an Item cancels the pair. Because every Peer derives the same events from the
-same stream, the histories converge without any dedicated sync.
+observed check-off records a purchase event, each deduplicated by Item. Because
+every Peer derives the same events from the same stream, the histories converge
+without any dedicated sync.
 _Avoid_: Purchase history (singular)
 
 **Restock prompt**:
@@ -93,11 +79,11 @@ not raw-frequency-based.
 
 **Suggestion**:
 A one-tap chip in the List's single suggestions strip that adds an Item. Each
-signal — added-together companions, fresh check-offs, restock prompts —
-normalizes to a 0..1 strength and mixes into one flat weighted score, so a
-Product can be suggested for several reasons at once; the chip's tooltip lists
-every reason that fired, its colour reflects the dominant one, and the strip
-filters down as the user types.
+signal — added-together companions, restock prompts — normalizes to a 0..1
+strength and mixes into one flat weighted score, so a Product can be suggested
+for several reasons at once; the chip's tooltip lists every reason that fired,
+its colour reflects the dominant one, and the strip filters down as the user
+types.
 _Avoid_: recommendation, buy-again
 
 **Added-together**:

@@ -24,9 +24,6 @@ build migration mechanisms.
   and users can flip it per device via the drawer toggle (persisted in
   `pwa_grocery_sync`). While off, no ntfy.sh network calls happen — the app runs
   local-only. The drawer also shows a per-device "messages sent today" counter.
-- Undo is off by default (`ENABLE_UNDO` near the top of `js/main.js`, `false`).
-  Set it to `false` to test the event store without Undo classification — every
-  re-add then records a plain add event.
 - Service worker is cache-first with `CACHE_NAME` derived from `js/version.js`
   (single source of truth — the same value shows in the drawer footer). Bump
   `APP_VERSION` in `js/version.js` AND add any new `js/*.js` file to `ASSETS`
@@ -71,12 +68,12 @@ build migration mechanisms.
   Use that language in code and discussions. The bought shelf and Clearing are
   gone: checking off removes the Item and records a Purchase (ADR-0007), and the
   device-local `events` store derives add/purchase history from the message
-  stream with a 10-minute Undo (ADR-0008). Suggestion ranking is a flat weighted
+  stream (ADR-0008). Suggestion ranking is a flat weighted
   score (issues 05, 09, 11, 02): pivot companions (≥3 co-occurring sessions,
-  30-minute session gap, averaged across the session's on-List Items), fresh
-  check-offs (60-minute window), and restock-due prompts each normalize to 0..1
-  and mix into `1.0·pivot + 0.7·fresh + 0.6·restock` (weights are tuning knobs,
-  constant regardless of context); chips sort by score, signal count, strongest
+  30-minute session gap, averaged across the session's on-List Items) and
+  restock-due prompts each normalize to 0..1 and mix into
+  `1.0·pivot + 0.6·restock` (weights are tuning knobs, constant regardless of
+  context); chips sort by score, signal count, strongest
   signal, then spelling, a chip's tooltip lists every fired signal, and its
   colour reflects the dominant signal.
   Catalog merge on import is

@@ -12,7 +12,6 @@ import * as ui from "./ui.js";
 
 // --- Dev / Sync Toggle ---
 const ENABLE_SYNC = false; // Shipped default; the in-app toggle overrides per device
-const ENABLE_UNDO = false; // Dev flag: set false to test without Undo (re-adds always record add events)
 
 // --- List & Peer Setup ---
 const PEER_ID = "usr_" + Math.random().toString(36).substring(2, 9);
@@ -37,9 +36,9 @@ window.location.hash = `list=${listName}`;
 // --- Rendering ---
 let currentView = "list";
 
-// Re-renders when a suggestion context window (added-together pivot, trip
-// window) lapses, so expired regimes leave the strip without waiting for the
-// next user action. Reset on every render; null expiresAt schedules nothing.
+// Re-renders when a suggestion context window (added-together pivot) lapses,
+// so expired regimes leave the strip without waiting for the next user action.
+// Reset on every render; null expiresAt schedules nothing.
 let rankingRefreshTimer = null;
 
 function scheduleRankingRefresh(expiresAt) {
@@ -122,23 +121,17 @@ async function writeItem(item, product = null, announce = false) {
   await db.put("items", item);
   if (isNew) {
     // Add-event derivation (ADR-0008): a PUT_ITEM for an Item new to this
-    // device records an add event from the Item's createdAt. A re-add inside
-    // the Undo window cancels the previous purchase instead and records
-    // nothing itself (the paired add survives as the last independent add).
-    // Derived ids keep the 12h SSE replay / FULL_SYNC re-puts idempotent.
-    const undone =
-      ENABLE_UNDO && (await catalog.cancelUndoIfFresh(item.productId));
-    if (!undone) {
-      await db.put("events", {
-        id: `${listName}::add::${item.id}`,
-        list: listName,
-        kind: "add",
-        itemId: item.id,
-        productId: item.productId,
-        detail: item.detail || "",
-        at: item.createdAt,
-      });
-    }
+    // device always records an add event from the Item's createdAt. Derived
+    // ids keep the 12h SSE replay / FULL_SYNC re-puts idempotent.
+    await db.put("events", {
+      id: `${listName}::add::${item.id}`,
+      list: listName,
+      kind: "add",
+      itemId: item.id,
+      productId: item.productId,
+      detail: item.detail || "",
+      at: item.createdAt,
+    });
   }
   if (announce) {
     // Coupled transport (ADR-0005): PUT_ITEM always carries its Product so
