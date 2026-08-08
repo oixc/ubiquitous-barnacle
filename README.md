@@ -27,4 +27,4 @@ The List only ever shows what's left to buy.
 * Smart Recommendations: Device-local history drives a single context-aware recommendations strip — interval-aware restock prompts, and "added-together" companions — so building the List stays a few taps. No tracking, no sponsored suggestions.
 
 ## Todo
-- Open ideas are tracked as tickets under `.scratch/readme-todos/issues/`.
+- Open ideas are tracked as tickets under `.scratch/<topic>/issues/`.
