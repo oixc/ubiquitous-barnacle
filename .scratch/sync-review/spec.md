@@ -29,6 +29,17 @@ success, and that burst vs daily 429s are distinguished in the status.
 
 - `issues/01-budget-size-protection.md` — budget & size protection (no blockers)
 - `issues/02-reconnect-convergence.md` — reconnect broadcast + offline removals (blocked by 01)
+- `issues/03-sync-state-per-list.md` — sync state saved per List (no blockers)
+- `issues/04-sync-on-by-default.md` — sync on by default (blocked by 01, 02, 03)
+
+## Non-goals (reconfirmed)
+
+- No membership/permissions (ADR-0002) — the unguessable-List-name model.
+- No migration mechanisms (early development, breaking changes welcome).
+- No conflict resolution — last-writer-wins per record stays (ADR-0003 undecided).
+- No change to fresh-join `REQUEST_SYNC`/`FULL_SYNC` beyond what the tickets specify.
+- No removal of the per-device Sync toggle — the per-List state in `03` replaces the
+  device-wide key, the toggle itself stays.
 
 ## Non-goals (reconfirmed)
 
