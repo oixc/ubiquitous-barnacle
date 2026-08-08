@@ -32,12 +32,12 @@ build migration mechanisms.
   ntfy.sh requests deliberately bypass the cache.
 - Sync protocol: ntfy.sh topic == List name (from `#list=` URL hash, else
   localStorage `pwa_grocery_list`, else generated). Actions: `PUT_ITEM`,
-  `DELETE_ITEM`, `PUT_PRODUCT`, `DELETE_PRODUCT`, `CLEAR_BOUGHT`,
-  `REQUEST_SYNC`, `FULL_SYNC` (sends `{items, products}`); own messages
-  filtered via `PEER_ID`/`peerId`. Lists have no auth — anyone who knows the
-  topic can read/write. `CLEAR_BOUGHT` carries no payload: each Peer removes
-  its own bought Items. Purchase history is device-local (never synced). Items
-  carry a `bought` boolean field.
+  `DELETE_ITEM`, `PUT_PRODUCT`, `DELETE_PRODUCT`, `REQUEST_SYNC`,
+  `FULL_SYNC` (sends `{items, products}`); `DELETE_ITEM` carries the Item
+  snapshot `{id, productId, detail, deletedAt?}` — `deletedAt` present only
+  on check-offs, absent for plain removals. Own messages are filtered via
+  `PEER_ID`/`peerId`. Lists have no auth — anyone who knows the topic can
+  read/write. Purchase history is device-local (never synced).
 - Sync is budget-conscious (ntfy.sh free tier: 250 messages/day per IP).
   `PUT_ITEM` always carries its Product (aliases + presets) so Product creation,
   alias-confirm, and preset-learning ride along instead of separate `PUT_PRODUCT`
