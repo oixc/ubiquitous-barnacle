@@ -66,6 +66,10 @@ export function renderAll({
   setActiveNav(view);
   showSection(view);
   closeMenu();
+  // Autocomplete source: the whole Catalog, minus Products already on the List
+  // (a tap on those would be a no-op, and the strip never offers them).
+  autocompleteProducts = products || [];
+  onListIds = new Set(items.map((i) => i.productId));
   renderRecommendations(recommendations);
   renderList({ items, products, listName, tripPositions });
   renderCatalog(products, history);
@@ -137,19 +141,47 @@ function renderRecentLists(listActivity, currentList) {
 }
 
 let currentRecommendations = [];
+// Full Catalog and on-List product ids, captured on every render: the live
+// type-to-filter autocomplete scans all known Products while typing, not just
+// the signal-bearing strip (which stays the steady-state, empty-input view).
+let autocompleteProducts = [];
+let onListIds = new Set();
 
-// Live filter: while the add input is non-empty, show only chips whose Product
-// spelling or aliases start with the typed text; otherwise the full strip.
+const MAX_AUTOCOMPLETE = 20;
+
+// Does a Product's spelling or any alias start with the typed prefix?
+function matchesPrefix(product, prefix) {
+  return [product.defaultSpelling, ...product.aliases].some((sp) =>
+    normalizeText(sp).startsWith(prefix),
+  );
+}
+
+// Live filter: while the add input is non-empty, show recommended chips that
+// match the typed text first (keeping their kind/colour/tooltips and ranking),
+// then top up with every other known Product that matches — a tap-able
+// autocomplete over the whole Catalog. On-List Products are excluded, matching
+// the strip's own behaviour. Empty input shows the full recommendation strip.
 function recommendationsFilter() {
   const input = document.getElementById("item-input");
   const prefix = input ? normalizeText(input.value) : "";
   if (!prefix) return currentRecommendations;
-  return currentRecommendations.filter((s) => {
-    const product = s && s.product;
-    if (!product) return false;
-    const spellings = [product.defaultSpelling, ...product.aliases];
-    return spellings.some((sp) => normalizeText(sp).startsWith(prefix));
-  });
+  const matching = currentRecommendations.filter((s) =>
+    s && s.product ? matchesPrefix(s.product, prefix) : false,
+  );
+  const recIds = new Set(matching.map((s) => s.product.id));
+  const catalogMatches = autocompleteProducts
+    .filter(
+      (p) =>
+        !onListIds.has(p.id) &&
+        !recIds.has(p.id) &&
+        matchesPrefix(p, prefix),
+    )
+    .sort((a, b) =>
+      a.defaultSpelling.localeCompare(b.defaultSpelling),
+    )
+    .slice(0, MAX_AUTOCOMPLETE)
+    .map((p) => ({ product: p, kind: "match", reasons: [] }));
+  return [...matching, ...catalogMatches];
 }
 
 // Human-readable restock interval, e.g. "every 3:45" (sub-2-day), "every 3 days",
@@ -214,7 +246,8 @@ function formatRelative(ts) {
 }
 
 // Chip style per recommendation kind: pivot (added-together companions) is blue,
-// restock (due) is amber.
+// restock (due) is amber; "match" chips are the neutral type-to-filter
+// autocomplete entries (no signal, just a known Product).
 const RECOMMENDATION_STYLES = {
   pivot: {
     chip: "border bg-blue-950/40 border-blue-800/40 text-blue-200 hover:bg-blue-900/40",
@@ -223,6 +256,10 @@ const RECOMMENDATION_STYLES = {
   restock: {
     chip: "border bg-amber-950/40 border-amber-800/40 text-amber-200 hover:bg-amber-900/40",
     plus: "text-amber-300",
+  },
+  match: {
+    chip: "border bg-slate-800/60 border-slate-700 text-slate-200 hover:bg-slate-700/60",
+    plus: "text-slate-300",
   },
 };
 
@@ -233,10 +270,11 @@ function recommendationChip(s) {
     restock: (r) =>
       `Restock ${formatInterval(r.interval)} · due ${formatRelative(r.dueAt)}`,
   };
-  const title = (s.reasons || [])
-    .map((r) => reasonText[r.kind](r))
-    .join("\n");
-  const style = RECOMMENDATION_STYLES[s.kind] || RECOMMENDATION_STYLES.restock;
+  const title =
+    s.reasons && s.reasons.length
+      ? s.reasons.map((r) => reasonText[r.kind](r)).join("\n")
+      : "Add";
+  const style = RECOMMENDATION_STYLES[s.kind] || RECOMMENDATION_STYLES.match;
   return `
     <button data-action="add-recommended" data-id="${p.id}" title="${escapeHtml(title)}" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg text-xs ${style.chip} transition active:scale-95 motion-reduce:transition-none motion-reduce:transform-none">
       ${escapeHtml(p.defaultSpelling)}
