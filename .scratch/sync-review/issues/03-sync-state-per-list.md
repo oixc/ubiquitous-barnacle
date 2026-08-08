@@ -9,8 +9,8 @@ users.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Toggling Sync on or off persists per List, not device-wide.
-- [ ] Switching Lists applies that List's remembered Sync state (a List with no saved state uses the shipped default).
-- [ ] The per-device global Sync state no longer influences other Lists.
+- [x] Toggling Sync on or off persists per List, not device-wide.
+- [x] Switching Lists applies that List's remembered Sync state (a List with no saved state uses the shipped default).
+- [x] The per-device global Sync state no longer influences other Lists.

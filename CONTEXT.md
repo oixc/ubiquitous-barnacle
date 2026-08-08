@@ -106,6 +106,13 @@ to send its current Items and Products. Manual; covers Peers offline longer
 than the sync window and deliberate Catalog re-pulls.
 _Avoid_: reload, re-sync
 
+**Reconnect broadcast**:
+A Peer's push of its current Items, Products, and removal tombstones to the
+List when it (re)connects, so changes made while offline or with Sync off reach
+every other Peer. Converges the Item List; check-off removals carry their time
+so Purchase history converges too.
+_Avoid_: state dump, re-sync
+
 **Sync budget**:
 The finite daily allowance of messages a List's Peers may publish to the shared
 relay. Its conservation shapes which changes propagate in real time and which

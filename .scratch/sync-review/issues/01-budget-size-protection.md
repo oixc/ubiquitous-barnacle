@@ -20,9 +20,9 @@ This is the blocker for the reconnect convergence work: the convergence broadcas
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] A rejected publish (non-429 4xx/5xx, e.g. 413) does not bump the daily counter and does not clear a "limited" status; it surfaces as a status/error instead.
-- [ ] A publish whose serialized payload exceeds the relay's message cap is refused before sending, shows a clear "too large" status, and does not count toward the budget.
-- [ ] A burst 429 (resets in minutes) is shown distinctly from the daily-limit 429 (resets at midnight UTC) in the status pill.
-- [ ] A network-level publish failure surfaces in the status rather than only in the console.
+- [x] A rejected publish (non-429 4xx/5xx, e.g. 413) does not bump the daily counter and does not clear a "limited" status; it surfaces as a status/error instead.
+- [x] A publish whose serialized payload exceeds the relay's message cap is refused before sending, shows a clear "too large" status, and does not count toward the budget.
+- [x] A burst 429 (resets in minutes) is shown distinctly from the daily-limit 429 (resets at midnight UTC) in the status pill.
+- [x] A network-level publish failure surfaces in the status rather than only in the console.

@@ -10,8 +10,8 @@ convergence: broadcast state + offline removals (so the default flips once publi
 are budget-honest and offline changes converge), and `03` — Sync state is saved per
 List (so the default composes with the per-List model).
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] A fresh install starts with Sync On; the List syncs without touching the toggle.
-- [ ] The drawer toggle can still turn Sync off, and the choice sticks per List (ticket `03`).
-- [ ] The "Sync is off by default" documentation is updated to reflect the new default.
+- [x] A fresh install starts with Sync On; the List syncs without touching the toggle.
+- [x] The drawer toggle can still turn Sync off, and the choice sticks per List (ticket `03`).
+- [x] The "Sync is off by default" documentation is updated to reflect the new default.

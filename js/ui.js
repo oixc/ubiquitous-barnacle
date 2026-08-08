@@ -369,6 +369,25 @@ export function setSyncStatus(status) {
       dot: "bg-rose-400",
       label: "Sync limited",
     },
+    // Burst request limit (42901): recovers in minutes — distinct from the
+    // daily message quota, which only resets at midnight UTC.
+    burst: {
+      cls: "bg-amber-950/60 text-amber-300",
+      dot: "bg-amber-400",
+      label: "Sync busy",
+    },
+    // Publish refused before sending: payload exceeds the relay's message cap.
+    "too-large": {
+      cls: "bg-rose-950/60 text-rose-300",
+      dot: "bg-rose-400",
+      label: "Too large to sync",
+    },
+    // A publish the relay rejected (non-429 4xx/5xx).
+    "publish-error": {
+      cls: "bg-rose-950/60 text-rose-300",
+      dot: "bg-rose-400",
+      label: "Sync error",
+    },
   };
   const s = states[status] || states.connecting;
   el.className = `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${s.cls}`;

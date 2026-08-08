@@ -12,7 +12,7 @@ import * as backup from "./backup.js";
 import * as ui from "./ui.js";
 
 // --- Dev / Sync Toggle ---
-const ENABLE_SYNC = false; // Shipped default; the in-app toggle overrides per device
+const ENABLE_SYNC = true; // Shipped default; the in-app toggle overrides per List
 
 // --- List & Peer Setup ---
 const PEER_ID = "usr_" + Math.random().toString(36).substring(2, 9);
@@ -33,6 +33,19 @@ if (!listName) {
 }
 localStorage.setItem("pwa_grocery_list", listName);
 window.location.hash = `list=${listName}`;
+
+// Sync preference is remembered per List, not device-wide: each List keeps its
+// own On/Off state, and one that was never touched uses the shipped default.
+// The old device-wide `pwa_grocery_sync` key is ignored (no migration — early
+// development, breaking changes welcome).
+function syncPrefKey(list) {
+  return "pwa_grocery_sync::" + list;
+}
+
+function isSyncOnForList(list) {
+  const stored = localStorage.getItem(syncPrefKey(list));
+  return stored == null ? ENABLE_SYNC : stored === "1";
+}
 
 // --- Rendering ---
 let currentView = "list";
@@ -187,7 +200,19 @@ async function writeDelete(id, snapshot = null, announce = false) {
       detail,
     };
     if (deletedAt != null) payload.deletedAt = deletedAt;
-    sync.publishAction(payload);
+    // If the DELETE_ITEM never reaches Peers (sync off, offline, rate-limited,
+    // or rejected), keep the removal as a tombstone so the next reconnect
+    // broadcast converges it (ADR-0009). Not awaited: the UI stays snappy and
+    // the tombstone lands whenever the publish settles. publishAction never
+    // rejects (its failures are returned), so a single success callback covers
+    // both paths. The List is captured here so a List switch before the
+    // publish settles can't mis-scope the tombstone.
+    const removalList = listName;
+    sync.publishAction(payload).then((res) => {
+      if (!res || !res.ok) {
+        sync.recordRemoval({ id, productId, detail, deletedAt, list: removalList });
+      }
+    });
   }
   renderAll();
 }
@@ -256,7 +281,7 @@ const actions = {
     if (await backup.importFromFile(file)) renderAll();
   },
   setSyncEnabled: (value) => {
-    localStorage.setItem("pwa_grocery_sync", value ? "1" : "0");
+    localStorage.setItem(syncPrefKey(listName), value ? "1" : "0");
     sync.setSyncEnabled(value);
     renderAll();
   },
@@ -289,7 +314,7 @@ const wire = makeFace(false);
 sync.configureSync({
   getListName: () => listName,
   peerId: PEER_ID,
-  enabled: ENABLE_SYNC && localStorage.getItem("pwa_grocery_sync") !== "0",
+  getEnabled: () => isSyncOnForList(listName),
   onStatus: (status) => ui.setSyncStatus(status),
   apply: wire,
 });

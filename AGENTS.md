@@ -21,9 +21,11 @@ build migration mechanisms.
 - There are no tests, linters, or typechecks. Verify changes manually in the browser.
 
 ## Gotchas
-- Sync is off by default (`ENABLE_SYNC` near the top of `js/main.js`, `false`),
-  and users can flip it per device via the drawer toggle (persisted in
-  `pwa_grocery_sync`). While off, no ntfy.sh network calls happen — the app runs
+- Sync is on by default (`ENABLE_SYNC` near the top of `js/main.js`, `true`),
+  and users can flip it per List via the drawer toggle (persisted in
+  `pwa_grocery_sync::<list>`, one key per List — a List that was never touched
+  uses the shipped default; the old device-wide `pwa_grocery_sync` key is
+  ignored). While off, no ntfy.sh network calls happen — the app runs
   local-only. The drawer also shows a per-device "messages sent today" counter.
 - Service worker is cache-first with `CACHE_NAME` derived from `js/version.js`
   (single source of truth — the same value shows in the drawer footer). Bump
@@ -33,8 +35,9 @@ build migration mechanisms.
 - Sync protocol: ntfy.sh topic == List name (from `#list=` URL hash, else
   localStorage `pwa_grocery_list`, else generated). Actions: `PUT_ITEM`,
   `DELETE_ITEM`, `PUT_PRODUCT`, `DELETE_PRODUCT`, `REQUEST_SYNC`,
-  `FULL_SYNC` (sends `{items, products}`); `DELETE_ITEM` carries the Item
-  snapshot `{id, productId, detail, deletedAt?}` — `deletedAt` present only
+  `FULL_SYNC` (sends `{items, products}`), `STATE_SYNC` (reconnect broadcast,
+  sends `{items, products, removals}`, see ADR-0009); `DELETE_ITEM` carries the
+  Item snapshot `{id, productId, detail, deletedAt?}` — `deletedAt` present only
   on check-offs, absent for plain removals. Own messages are filtered via
   `PEER_ID`/`peerId`. Lists have no auth — anyone who knows the topic can
   read/write. Purchase history is device-local (never synced).
@@ -45,8 +48,22 @@ build migration mechanisms.
   (rename, delete, delete-preset, alias-confirm when the Product is already a
   to-buy Item). Catch-up is on-demand: `REQUEST_SYNC` fires only on a fresh join
   (empty local DB) or the drawer's Refresh action; steady-state reconnects rely on
-  the free `since=12h` SSE replay. A 429 publish sets the status pill to
-  "Sync limited" until the next success or midnight UTC.
+  the free `since=12h` SSE replay.
+  Reconnect convergence (ADR-0009): on every SSE connect with local state (or
+  pending removal tombstones) the device broadcasts `STATE_SYNC` — its current
+  Items + Products + the removals it made while offline/with Sync off, which
+  Peers merge (removals apply after Items; a removal is skipped if the broadcast
+  Items still contain that ID — re-add wins). Tombstones live in the
+  `tombstones` store and flush once the broadcast publishes OK; the broadcast
+  is throttled to one per 60s unless tombstones are pending. Publishes are
+  budget-honest: only a 2xx counts as sent and clears a failure status; an
+  oversized payload (relay caps messages at 4096 bytes) is refused before
+  sending with a "Too large to sync" pill; a rejected publish (non-429 4xx/5xx)
+  surfaces as "Sync error"; network failures surface as "offline". The 429 pill
+  distinguishes the burst request limit (`burst` — recovers in minutes) from
+  the daily message quota (`limited` — resets at midnight UTC); `limited` is
+  sticky — a later failure never displaces it, and an SSE reconnect does not
+  clear it either; only a 2xx does.
 - Backup/restore lives in `js/backup.js` (configured from `main.js`): a single
   versioned JSON file exports a List's Catalog + event history (add and purchase
   events — format v2, see ADR-0008); restoring merges local-only — never
@@ -57,11 +74,13 @@ build migration mechanisms.
   the automatic fresh-join catch-up pull, so hit the drawer's Refresh afterwards
   to still fetch live Items/Products from Peers.
 - IndexedDB is `GroceryDB` (version bumps freely in early development, currently
-  v5): `items`, `products`, and `events` stores, each with a `byList` index —
-  `events` (ADR-0008) is the device-local add/purchase history replacing the old
-  `purchaseHistory` store. Item/Product/event IDs are prefixed with the List name
-  (`${listName}::…`) so one DB can hold several Lists without cross-talk; on List
-  switch, reads are scoped by `listName` and nothing carries over.
+  v6): `items`, `products`, `events`, and `tombstones` stores, each with a
+  `byList` index — `events` (ADR-0008) is the device-local add/purchase history
+  replacing the old `purchaseHistory` store, and `tombstones` (ADR-0009) holds
+  pending offline removals awaiting the next reconnect broadcast.
+  Item/Product/event IDs are prefixed with the List name (`${listName}::…`) so
+  one DB can hold several Lists without cross-talk; on List switch, reads are
+  scoped by `listName` and nothing carries over.
 - Tailwind comes from the CDN (`cdn.tailwindcss.com`), not a build pipeline.
   The app is dark-mode only (slate-950 base); there is no theme switcher and no
   `dark:` variant usage. Don't reintroduce a light theme or a toggle.

@@ -25,13 +25,13 @@ instead of failing silently.
 **Blocked by:** `01` — Budget & size protection for publishes (the broadcast must be
 budget-honest and size-guarded before this ships).
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] After a reconnect with local state, the Peer publishes one broadcast of current Items + Products; Peers apply it without echoing it back.
-- [ ] Items added or edited while offline, or with Sync off, appear on every other Peer after this device reconnects or Sync is re-enabled.
-- [ ] Items removed (plain removal or check-off) while offline, or with Sync off, disappear from every other Peer after reconnect, via the removals carried in the broadcast.
-- [ ] A check-off carried as a removal includes its `deletedAt`, so other Peers derive the Purchase event and history converges.
-- [ ] A removal is applied only if the incoming broadcast's Items don't already contain the same ID (re-add before reconnect wins).
-- [ ] A removal's tombstone is cleared once the broadcast succeeds, and does not fire again on later reconnects.
-- [ ] A device with an empty List on connect does not broadcast; the fresh-join `REQUEST_SYNC` for an empty DB still works.
-- [ ] An oversized broadcast surfaces the "too large" status from ticket `01` rather than failing silently or burning budget.
+- [x] After a reconnect with local state, the Peer publishes one broadcast of current Items + Products; Peers apply it without echoing it back.
+- [x] Items added or edited while offline, or with Sync off, appear on every other Peer after this device reconnects or Sync is re-enabled.
+- [x] Items removed (plain removal or check-off) while offline, or with Sync off, disappear from every other Peer after reconnect, via the removals carried in the broadcast.
+- [x] A check-off carried as a removal includes its `deletedAt`, so other Peers derive the Purchase event and history converges.
+- [x] A removal is applied only if the incoming broadcast's Items don't already contain the same ID (re-add before reconnect wins).
+- [x] A removal's tombstone is cleared once the broadcast succeeds, and does not fire again on later reconnects.
+- [x] A device with an empty List on connect does not broadcast; the fresh-join `REQUEST_SYNC` for an empty DB still works.
+- [x] An oversized broadcast surfaces the "too large" status from ticket `01` rather than failing silently or burning budget.
