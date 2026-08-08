@@ -8,6 +8,7 @@ const ASSETS = [
   "./js/db.js",
   "./js/sync.js",
   "./js/catalog.js",
+  "./js/recommendations.js",
   "./js/backup.js",
   "./js/ui.js",
   "./js/version.js",

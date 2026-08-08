@@ -54,7 +54,7 @@ export function renderAll({
   items,
   products,
   history,
-  suggestions,
+  recommendations,
   tripPositions,
   listName,
   listActivity,
@@ -66,7 +66,7 @@ export function renderAll({
   setActiveNav(view);
   showSection(view);
   closeMenu();
-  renderSuggestions(suggestions);
+  renderRecommendations(recommendations);
   renderList({ items, products, listName, tripPositions });
   renderCatalog(products, history);
   renderHistory(history, products);
@@ -136,15 +136,15 @@ function renderRecentLists(listActivity, currentList) {
     .join("");
 }
 
-let currentSuggestions = [];
+let currentRecommendations = [];
 
 // Live filter: while the add input is non-empty, show only chips whose Product
 // spelling or aliases start with the typed text; otherwise the full strip.
-function suggestionsFilter() {
+function recommendationsFilter() {
   const input = document.getElementById("item-input");
   const prefix = input ? normalizeText(input.value) : "";
-  if (!prefix) return currentSuggestions;
-  return currentSuggestions.filter((s) => {
+  if (!prefix) return currentRecommendations;
+  return currentRecommendations.filter((s) => {
     const product = s && s.product;
     if (!product) return false;
     const spellings = [product.defaultSpelling, ...product.aliases];
@@ -213,9 +213,9 @@ function formatRelative(ts) {
   return `${plural(Math.round(diff / (365 * 24 * 60 * 60 * 1000)), "year")} ago`;
 }
 
-// Chip style per suggestion kind: pivot (added-together companions) is blue,
+// Chip style per recommendation kind: pivot (added-together companions) is blue,
 // restock (due) is amber.
-const SUGGESTION_STYLES = {
+const RECOMMENDATION_STYLES = {
   pivot: {
     chip: "border bg-blue-950/40 border-blue-800/40 text-blue-200 hover:bg-blue-900/40",
     plus: "text-blue-300",
@@ -226,7 +226,7 @@ const SUGGESTION_STYLES = {
   },
 };
 
-function suggestionChip(s) {
+function recommendationChip(s) {
   const p = s.product;
   const reasonText = {
     pivot: (r) => `Added together ${r.count}×`,
@@ -236,32 +236,32 @@ function suggestionChip(s) {
   const title = (s.reasons || [])
     .map((r) => reasonText[r.kind](r))
     .join("\n");
-  const style = SUGGESTION_STYLES[s.kind] || SUGGESTION_STYLES.restock;
+  const style = RECOMMENDATION_STYLES[s.kind] || RECOMMENDATION_STYLES.restock;
   return `
-    <button data-action="add-suggested" data-id="${p.id}" title="${escapeHtml(title)}" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg text-xs ${style.chip} transition active:scale-95 motion-reduce:transition-none motion-reduce:transform-none">
+    <button data-action="add-recommended" data-id="${p.id}" title="${escapeHtml(title)}" class="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg text-xs ${style.chip} transition active:scale-95 motion-reduce:transition-none motion-reduce:transform-none">
       ${escapeHtml(p.defaultSpelling)}
       ${icon("plus", `w-3.5 h-3.5 ${style.plus}`)}
     </button>`;
 }
 
-function renderSuggestionStrip() {
-  const el = document.getElementById("suggestions");
+function renderRecommendationStrip() {
+  const el = document.getElementById("recommendations");
   if (!el) return;
-  const visible = suggestionsFilter();
+  const visible = recommendationsFilter();
   if (visible.length === 0) {
     el.innerHTML = "";
     return;
   }
   el.innerHTML = `
     <div class="flex flex-wrap gap-2">
-      ${visible.map(suggestionChip).join("")}
+      ${visible.map(recommendationChip).join("")}
     </div>
   `;
 }
 
-function renderSuggestions(suggestions) {
-  currentSuggestions = suggestions || [];
-  renderSuggestionStrip();
+function renderRecommendations(recommendations) {
+  currentRecommendations = recommendations || [];
+  renderRecommendationStrip();
 }
 
 function showSection(view) {
@@ -673,13 +673,13 @@ function bindEvents() {
     if (!text) return;
     itemInput.value = "";
     clearPresetChips();
-    renderSuggestionStrip();
+    renderRecommendationStrip();
     actions.addItem(text);
   });
 
   itemInput.addEventListener("input", (e) => {
     clearTimeout(detailTimer);
-    renderSuggestionStrip();
+    renderRecommendationStrip();
     const value = e.target.value.trim();
     if (!value) {
       clearPresetChips();
@@ -707,12 +707,12 @@ function bindEvents() {
     "rename-product": (el) => startRename(el.dataset.id),
     "delete-product": (el) => actions.deleteProduct(el.dataset.id),
     "delete-preset": (el) => actions.deletePreset(el.dataset.id, el.dataset.detail),
-    "add-suggested": (el) => actions.suggest(el.dataset.id),
+    "add-recommended": (el) => actions.addRecommended(el.dataset.id),
     "edit-detail": (el) => startDetailEdit(el.dataset.id),
     "add-with-detail": (el) => {
       itemInput.value = "";
       clearPresetChips();
-      renderSuggestionStrip();
+      renderRecommendationStrip();
       actions.addItemWithDetail(el.dataset.id, el.dataset.detail);
     },
     "open-menu": () => openMenu(),

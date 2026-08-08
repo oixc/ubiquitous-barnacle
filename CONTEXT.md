@@ -73,23 +73,24 @@ without any dedicated sync.
 _Avoid_: Purchase history (singular)
 
 **Restock prompt**:
-A suggestion to re-add a Product that is due for restock — its restock interval
+A recommendation to re-add a Product that is due for restock — its restock interval
 (learned from purchase events) has elapsed since the last Purchase. Due-based,
 not raw-frequency-based.
 
-**Suggestion**:
-A one-tap chip in the List's single suggestions strip that adds an Item. Each
+**Recommendation**:
+A one-tap chip in the List's single recommendations strip that adds an Item. Each
 signal — added-together companions, restock prompts — normalizes to a 0..1
-strength and mixes into one flat weighted score, so a Product can be suggested
+strength and mixes into one flat weighted score, so a Product can be recommended
 for several reasons at once; the chip's tooltip lists every reason that fired,
-its colour reflects the dominant one, and the strip filters down as the user
+its colour reflects the dominant one — except that a due restock prompt always
+takes the restock colour over the pivot — and the strip filters down as the user
 types.
-_Avoid_: recommendation, buy-again
+_Avoid_: suggestion, buy-again
 
 **Added-together**:
 Two Products that have been added to the List in the same adding session at least
 three times. Adding surfaces the union of the current adding session's on-List
-Items' added-together companions as suggestions.
+Items' added-together companions as recommendations.
 
 **Peer**:
 An anonymous device participating in a List. No identity beyond the current

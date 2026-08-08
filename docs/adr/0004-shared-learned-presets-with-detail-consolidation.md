@@ -19,4 +19,4 @@ of measurements is out of scope for a shopping list.
 Revive keeps the stored Detail of the previously bought Item rather than
 forcing a new choice; free-text entry always remains available alongside the
 chips. Purchase history records the Detail at buy time for future
-suggestion logic, but nothing consumes it yet.
+recommendation logic, but nothing consumes it yet.

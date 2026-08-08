@@ -7,6 +7,7 @@
 import * as db from "./db.js";
 import * as sync from "./sync.js";
 import * as catalog from "./catalog.js";
+import { computeRecommendations } from "./recommendations.js";
 import * as backup from "./backup.js";
 import * as ui from "./ui.js";
 
@@ -36,7 +37,7 @@ window.location.hash = `list=${listName}`;
 // --- Rendering ---
 let currentView = "list";
 
-// Re-renders when a suggestion context window (added-together pivot) lapses,
+// Re-renders when a recommendation context window (added-together pivot) lapses,
 // so expired regimes leave the strip without waiting for the next user action.
 // Reset on every render; null expiresAt schedules nothing.
 let rankingRefreshTimer = null;
@@ -59,7 +60,7 @@ async function renderAll() {
     db.getAll("events", listName),
     db.getListActivity(),
   ]);
-  const { suggestions, expiresAt } = catalog.computeSuggestions({
+  const { recommendations, expiresAt } = computeRecommendations({
     products,
     items,
     events: history,
@@ -69,7 +70,7 @@ async function renderAll() {
     items,
     products,
     history,
-    suggestions,
+    recommendations,
     tripPositions,
     listName,
     listActivity,
@@ -275,7 +276,7 @@ const actions = {
     product.presets = product.presets.filter((p) => p !== detail);
     await actions.putProduct(product);
   },
-  suggest: async (productId) => {
+  addRecommended: async (productId) => {
     const product = await getProduct(productId);
     if (product) await catalog.addItem(product);
   },

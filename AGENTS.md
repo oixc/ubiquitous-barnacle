@@ -5,9 +5,10 @@ Zero-build PWA: a shared grocery list. `index.html` is markup/shell only; app lo
 lives in ES modules under `js/` (loaded via `<script type="module">`), split by
 concern: `main.js` (bootstrap, app state, single write path for all mutations),
 `db.js` (IndexedDB), `sync.js` (ntfy.sh SSE), `catalog.js` (Product resolution +
-Item revive), `ui.js` (rendering + delegated events; never touches DB or network
-directly). `sw.js` is the service worker, `manifest.json` the PWA manifest. No
-build step, no npm, no tests — keep it that way.
+Item creation + restock stats + typical purchase order), `recommendations.js`
+(recommendation ranking), `ui.js` (rendering + delegated events; never touches DB
+or network directly). `sw.js` is the service worker, `manifest.json` the PWA
+manifest. No build step, no npm, no tests — keep it that way.
 
 ## Status
 Early development — no deployed users, no backwards-compatibility guarantees.
@@ -68,14 +69,15 @@ build migration mechanisms.
   Use that language in code and discussions. The bought shelf and Clearing are
   gone: checking off removes the Item and records a Purchase (ADR-0007), and the
   device-local `events` store derives add/purchase history from the message
-  stream (ADR-0008). Suggestion ranking is a flat weighted
+  stream (ADR-0008). Recommendation ranking is a flat weighted
   score (issues 05, 09, 11, 02): pivot companions (≥3 co-occurring sessions,
   30-minute session gap, averaged across the session's on-List Items) and
   restock-due prompts each normalize to 0..1 and mix into
   `1.0·pivot + 0.6·restock` (weights are tuning knobs, constant regardless of
   context); chips sort by score, signal count, strongest
   signal, then spelling, a chip's tooltip lists every fired signal, and its
-  colour reflects the dominant signal.
+  colour reflects the dominant signal — except that a due restock prompt always
+  takes the restock colour over the pivot (03).
   Catalog merge on import is
   decided (spelling-dedupe, existing wins — see ADR-0006), while general
   peer-meeting reconciliation of duplicate Products remains undecided (see
